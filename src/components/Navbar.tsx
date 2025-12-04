@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Menu, X, User, LogOut } from "lucide-react";
+import { Menu, X, User, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdmin } from "@/hooks/useAdmin";
 import CartSheet from "./CartSheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -15,6 +17,7 @@ const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isAdmin } = useAdmin();
 
   const navLinks = [
     { name: "Home", path: "/" },
@@ -65,6 +68,16 @@ const Navbar = () => {
                   <DropdownMenuItem onClick={() => navigate('/meus-pedidos')}>
                     Meus Pedidos
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate('/admin')}>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Painel Admin
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut}>
                     <LogOut className="h-4 w-4 mr-2" />
                     Sair
@@ -116,6 +129,15 @@ const Navbar = () => {
                 >
                   Meus Pedidos
                 </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    className="block text-sm font-medium text-primary hover:text-primary/80 transition-smooth"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Painel Admin
+                  </Link>
+                )}
                 <button
                   onClick={() => { handleSignOut(); setIsOpen(false); }}
                   className="block text-sm font-medium text-foreground hover:text-primary transition-smooth"

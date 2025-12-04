@@ -1,10 +1,50 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Waves, Heart, Sparkles } from "lucide-react";
+import { Waves, Heart, Sparkles, ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import heroImage from "@/assets/hero-beach.jpg";
+import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const Home = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { addToCart } = useCart();
+
+  // Fetch active announcements
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch featured products (newest active products)
+  const { data: featuredProducts = [] } = useQuery({
+    queryKey: ['featured-products'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(8);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const categories = [
     { name: "Vestidos", image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&q=80" },
     { name: "Conjuntos", image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80" },
@@ -29,6 +69,22 @@ const Home = () => {
       description: "Do casual ao sofisticado, para todos os momentos",
     },
   ];
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(price);
+  };
+
+  const handleAddToCart = (productId: string) => {
+    if (!user) {
+      toast.error('Faça login para adicionar ao carrinho');
+      navigate('/auth');
+      return;
+    }
+    addToCart.mutate({ productId });
+  };
 
   return (
     <div className="min-h-screen">
@@ -59,8 +115,130 @@ const Home = () => {
         </div>
       </section>
 
+      {/* Announcements Carousel */}
+      {announcements.length > 0 && (
+        <section className="py-6 bg-primary/5">
+          <div className="container mx-auto px-4">
+            <Carousel
+              opts={{
+                align: "start",
+                loop: true,
+              }}
+              className="w-full"
+            >
+              <CarouselContent>
+                {announcements.map((announcement: any) => (
+                  <CarouselItem key={announcement.id} className="md:basis-1/2 lg:basis-1/3">
+                    {announcement.link_url ? (
+                      <Link to={announcement.link_url} className="block">
+                        <Card className="border-none shadow-medium hover:shadow-large transition-smooth overflow-hidden">
+                          {announcement.image_url && (
+                            <div className="aspect-[16/9] overflow-hidden">
+                              <img
+                                src={announcement.image_url}
+                                alt={announcement.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          <CardContent className={`${announcement.image_url ? 'p-4' : 'p-6'}`}>
+                            <h3 className="font-serif text-lg font-medium">{announcement.title}</h3>
+                            {announcement.description && (
+                              <p className="text-sm text-muted-foreground mt-1">{announcement.description}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    ) : (
+                      <Card className="border-none shadow-medium overflow-hidden">
+                        {announcement.image_url && (
+                          <div className="aspect-[16/9] overflow-hidden">
+                            <img
+                              src={announcement.image_url}
+                              alt={announcement.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <CardContent className={`${announcement.image_url ? 'p-4' : 'p-6'}`}>
+                          <h3 className="font-serif text-lg font-medium">{announcement.title}</h3>
+                          {announcement.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{announcement.description}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <CarouselPrevious className="left-2" />
+              <CarouselNext className="right-2" />
+            </Carousel>
+          </div>
+        </section>
+      )}
+
+      {/* Featured Products */}
+      {featuredProducts.length > 0 && (
+        <section className="container mx-auto px-4 py-16">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl md:text-4xl font-serif">Novidades</h2>
+            <Button variant="outline" asChild>
+              <Link to="/loja">Ver Todos</Link>
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {featuredProducts.map((product: any) => (
+              <Card 
+                key={product.id} 
+                className="group overflow-hidden border-none shadow-medium hover:shadow-large transition-smooth"
+              >
+                <div className="relative aspect-[3/4] overflow-hidden bg-muted">
+                  {product.images?.[0] ? (
+                    <img
+                      src={product.images[0]}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center gradient-ocean">
+                      <ShoppingBag className="h-12 w-12 text-primary-foreground/50" />
+                    </div>
+                  )}
+                  {product.original_price && product.original_price > product.price && (
+                    <span className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs px-2 py-1 rounded">
+                      {Math.round((1 - product.price / product.original_price) * 100)}% OFF
+                    </span>
+                  )}
+                </div>
+                <CardContent className="p-3 md:p-4">
+                  <p className="text-xs text-muted-foreground mb-1">{product.category}</p>
+                  <h3 className="font-medium text-sm md:text-base mb-2 line-clamp-1">{product.name}</h3>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-base md:text-lg font-semibold text-primary">{formatPrice(product.price)}</span>
+                    {product.original_price && product.original_price > product.price && (
+                      <span className="text-xs text-muted-foreground line-through">
+                        {formatPrice(product.original_price)}
+                      </span>
+                    )}
+                  </div>
+                  <Button 
+                    className="w-full" 
+                    size="sm"
+                    onClick={() => handleAddToCart(product.id)}
+                    disabled={addToCart.isPending || product.stock === 0}
+                  >
+                    {product.stock === 0 ? 'Esgotado' : 'Adicionar'}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Categories */}
-      <section className="container mx-auto px-4 py-20">
+      <section className="container mx-auto px-4 py-16">
         <h2 className="text-4xl md:text-5xl font-serif text-center mb-12">Categorias</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {categories.map((category, index) => (
