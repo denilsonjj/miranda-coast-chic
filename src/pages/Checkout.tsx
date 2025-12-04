@@ -159,6 +159,7 @@ const Checkout = () => {
     try {
       const orderTotal = cartTotal + selectedShipping.price;
       
+      // Create order first
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -192,11 +193,54 @@ const Checkout = () => {
         .insert(orderItems);
       
       if (itemsError) throw itemsError;
-      
+
+      // Create Mercado Pago payment
+      const baseUrl = window.location.origin;
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
+        body: {
+          items: cartItems.map(item => ({
+            id: item.product_id,
+            title: item.product.name,
+            quantity: item.quantity,
+            unit_price: item.product.price,
+            picture_url: item.product.images?.[0] || '',
+          })).concat([{
+            id: 'shipping',
+            title: `Frete - ${selectedShipping.company} ${selectedShipping.name}`,
+            quantity: 1,
+            unit_price: selectedShipping.price,
+            picture_url: '',
+          }]),
+          payer: {
+            email: user!.email,
+            name: user!.user_metadata?.full_name || '',
+          },
+          external_reference: order.id,
+          back_urls: {
+            success: `${baseUrl}/pedido/${order.id}?status=success`,
+            failure: `${baseUrl}/pedido/${order.id}?status=failure`,
+            pending: `${baseUrl}/pedido/${order.id}?status=pending`,
+          },
+        },
+      });
+
+      if (paymentError) {
+        console.error('Payment error:', paymentError);
+        toast.error('Erro ao criar pagamento. Você pode tentar pagar novamente na página do pedido.');
+        navigate(`/pedido/${order.id}`);
+        return;
+      }
+
       await clearCart.mutateAsync();
       
-      toast.success('Pedido criado com sucesso!');
-      navigate(`/pedido/${order.id}`);
+      // Redirect to Mercado Pago (use sandbox for test mode)
+      const redirectUrl = paymentData.sandbox_init_point || paymentData.init_point;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        toast.success('Pedido criado! Redirecionando para pagamento...');
+        navigate(`/pedido/${order.id}`);
+      }
       
     } catch (error: any) {
       console.error('Order creation error:', error);
@@ -385,10 +429,13 @@ const Checkout = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-center py-8 bg-secondary/30 rounded-lg">
-                    <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground mb-2">Integração com pagamento em breve</p>
-                    <p className="text-sm text-muted-foreground">
-                      Por enquanto, você pode finalizar o pedido e pagar depois.
+                    <CreditCard className="h-12 w-12 mx-auto mb-4 text-primary" />
+                    <p className="font-medium mb-2">Pague com Mercado Pago</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Você será redirecionado para o Mercado Pago para concluir o pagamento de forma segura.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Cartão de crédito, débito, Pix e boleto disponíveis
                     </p>
                   </div>
                 </CardContent>
@@ -413,9 +460,9 @@ const Checkout = () => {
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : (
-                <Button onClick={handleCreateOrder} disabled={isLoading}>
+                <Button onClick={handleCreateOrder} disabled={isLoading} className="bg-[#009ee3] hover:bg-[#007eb5]">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Finalizar Pedido
+                  Pagar com Mercado Pago
                 </Button>
               )}
             </div>
