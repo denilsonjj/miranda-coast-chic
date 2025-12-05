@@ -12,7 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList } from 'lucide-react';
+import { OrdersTab } from '@/components/admin/OrdersTab';
 import {
   Dialog,
   DialogContent,
@@ -284,8 +285,12 @@ const Admin = () => {
       <div className="container mx-auto px-4">
         <h1 className="text-3xl md:text-4xl font-serif mb-8">Painel Administrativo</h1>
         
-        <Tabs defaultValue="products" className="space-y-6">
+        <Tabs defaultValue="orders" className="space-y-6">
           <TabsList>
+            <TabsTrigger value="orders" className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Pedidos
+            </TabsTrigger>
             <TabsTrigger value="products" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Produtos
@@ -295,6 +300,11 @@ const Admin = () => {
               Anúncios
             </TabsTrigger>
           </TabsList>
+          
+          {/* Orders Tab */}
+          <TabsContent value="orders">
+            <OrdersTab />
+          </TabsContent>
           
           {/* Products Tab */}
           <TabsContent value="products">
