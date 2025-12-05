@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.create-payment]
 verify_jwt = false
+
+[functions.generate-shipping-label]
+verify_jwt = false
