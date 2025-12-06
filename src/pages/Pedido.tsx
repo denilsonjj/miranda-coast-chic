@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, Package, MapPin, Truck } from 'lucide-react';
+import { Loader2, CheckCircle, Package, MapPin, Truck, CreditCard } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface OrderItem {
   id: string;
@@ -47,6 +48,7 @@ const Pedido = () => {
   const { user, loading: authLoading } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPaymentLoading, setIsPaymentLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -105,6 +107,57 @@ const Pedido = () => {
       month: 'long',
       year: 'numeric',
     });
+  };
+
+  const handlePayWithMercadoPago = async () => {
+    if (!order) return;
+    
+    setIsPaymentLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: {
+          external_reference: order.id,
+          items: order.items.map(item => ({
+            id: item.id,
+            title: item.product_name,
+            quantity: item.quantity,
+            unit_price: item.price,
+          })),
+          payer: {
+            email: user?.email || '',
+            name: user?.email?.split('@')[0] || 'Cliente',
+          },
+          back_urls: {
+            success: `${window.location.origin}/pedido/${order.id}`,
+            failure: `${window.location.origin}/pedido/${order.id}`,
+            pending: `${window.location.origin}/pedido/${order.id}`,
+            notification: `${window.location.origin}/api/webhook/mercado-pago`,
+          },
+        },
+      });
+
+      if (error) {
+        console.error('Payment error:', error);
+        toast.error('Erro ao processar pagamento. Tente novamente.');
+        setIsPaymentLoading(false);
+        return;
+      }
+
+      if (data?.init_point) {
+        // Redirecionar para Mercado Pago
+        window.location.href = data.init_point;
+      } else if (data?.sandbox_init_point) {
+        // Usar sandbox em modo teste
+        window.location.href = data.sandbox_init_point;
+      } else {
+        toast.error('Erro ao processar pagamento. Tente novamente.');
+        setIsPaymentLoading(false);
+      }
+    } catch (error: any) {
+      console.error('Payment creation error:', error);
+      toast.error(error.message || 'Erro ao processar pagamento');
+      setIsPaymentLoading(false);
+    }
   };
 
   if (authLoading || isLoading) {
@@ -236,7 +289,65 @@ const Pedido = () => {
           </CardContent>
         </Card>
 
-        <div className="flex justify-center gap-4">
+        {/* Payment status card */}
+        <Card className="mb-6 border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Status de Pagamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">Pagamento:</span>
+              <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                order.payment_status === 'paid' 
+                  ? 'bg-green-100 text-green-700'
+                  : order.payment_status === 'pending'
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {order.payment_status === 'paid' && 'Pagamento Realizado ✓'}
+                {order.payment_status === 'pending' && 'Pendente'}
+                {order.payment_status === 'failed' && 'Falha'}
+              </span>
+            </div>
+
+            {order.payment_status === 'pending' && (
+              <div className="pt-2">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Escolha sua forma de pagamento. Você será redirecionado para o Mercado Pago de forma segura.
+                </p>
+                <Button 
+                  onClick={handlePayWithMercadoPago}
+                  disabled={isPaymentLoading}
+                  className="w-full bg-[#009ee3] hover:bg-[#007eb5]"
+                >
+                  {isPaymentLoading ? (
+                    <>
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Pagar com Mercado Pago
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {order.payment_status === 'paid' && (
+              <div className="p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-green-700">
+                  ✓ Seu pagamento foi processado com sucesso!
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-col sm:flex-row justify-center gap-4">
           <Button variant="outline" onClick={() => navigate('/loja')}>
             Continuar Comprando
           </Button>

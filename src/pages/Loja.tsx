@@ -23,6 +23,7 @@ const Loja = () => {
   const { user } = useAuth();
   const { addToCart } = useCart();
   const [selectedCategory, setSelectedCategory] = useState("Todos");
+  const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products', selectedCategory],
@@ -50,13 +51,19 @@ const Loja = () => {
     }).format(price);
   };
 
-  const handleAddToCart = (productId: string) => {
+  const handleAddToCart = async (productId: string) => {
     if (!user) {
       toast.error('Faça login para adicionar ao carrinho');
       navigate('/auth');
       return;
     }
-    addToCart.mutate({ productId });
+    
+    setIsAddingToCart(productId);
+    try {
+      await addToCart.mutateAsync({ productId });
+    } finally {
+      setIsAddingToCart(null);
+    }
   };
 
   return (
@@ -113,7 +120,8 @@ const Loja = () => {
             {products.map((product: any) => (
               <Card 
                 key={product.id} 
-                className="group overflow-hidden border-none shadow-medium hover:shadow-large transition-smooth"
+                className="group overflow-hidden border-none shadow-medium hover:shadow-large transition-smooth cursor-pointer"
+                onClick={() => navigate(`/produto/${product.id}`)}
               >
                 <div className="relative aspect-[3/4] overflow-hidden bg-muted">
                   {product.images?.[0] ? (
@@ -144,13 +152,37 @@ const Loja = () => {
                       </span>
                     )}
                   </div>
-                  <Button 
-                    className="w-full" 
-                    onClick={() => handleAddToCart(product.id)}
-                    disabled={addToCart.isPending || product.stock === 0}
-                  >
-                    {product.stock === 0 ? 'Esgotado' : 'Adicionar ao Carrinho'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      className="flex-1" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddToCart(product.id);
+                      }}
+                      disabled={isAddingToCart === product.id || product.stock === 0}
+                      size="sm"
+                    >
+                      {isAddingToCart === product.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Adicionando...
+                        </>
+                      ) : (
+                        product.stock === 0 ? 'Esgotado' : 'Carrinho'
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/produto/${product.id}`);
+                      }}
+                      size="sm"
+                      className="flex-1"
+                    >
+                      Detalhes
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

@@ -24,6 +24,18 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelado',
 };
 
+const paymentStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-50 border border-yellow-200 text-yellow-800',
+  paid: 'bg-green-50 border border-green-200 text-green-800',
+  failed: 'bg-red-50 border border-red-200 text-red-800',
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  pending: 'Aguardando Pagamento',
+  paid: 'Pagamento Confirmado',
+  failed: 'Pagamento Recusado',
+};
+
 const MeusPedidos = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -97,9 +109,16 @@ const MeusPedidos = () => {
                     <CardTitle className="text-lg font-medium">
                       Pedido #{order.id.slice(0, 8)}
                     </CardTitle>
-                    <Badge className={statusColors[order.status] || 'bg-gray-100 text-gray-800'}>
-                      {statusLabels[order.status] || order.status}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2">
+                      {/* Payment Status Badge */}
+                      <Badge className={`${paymentStatusColors[order.payment_status] || 'bg-gray-50 border border-gray-200 text-gray-800'} text-xs`}>
+                        {paymentStatusLabels[order.payment_status] || order.payment_status}
+                      </Badge>
+                      {/* Order Status Badge */}
+                      <Badge className={statusColors[order.status] || 'bg-gray-100 text-gray-800'}>
+                        {statusLabels[order.status] || order.status}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -112,6 +131,12 @@ const MeusPedidos = () => {
                           {order.tracking_code ? `Rastreio: ${order.tracking_code}` : 'Aguardando envio'}
                         </span>
                       </div>
+                      {/* Alert for awaiting payment */}
+                      {order.payment_status === 'pending' && (
+                        <p className="text-xs text-yellow-700 mt-2 font-medium">
+                          ⚠️ Este pedido ainda está aguardando confirmação de pagamento no Mercado Pago.
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-semibold text-primary">{formatPrice(order.total)}</p>

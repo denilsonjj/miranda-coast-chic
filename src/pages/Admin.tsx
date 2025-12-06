@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,8 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { ImageUpload } from '@/components/ImageUpload';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { OrdersTab } from '@/components/admin/OrdersTab';
 import {
   Dialog,
@@ -52,7 +53,7 @@ const Admin = () => {
     stock: '',
     sizes: '',
     colors: '',
-    images: '',
+    images: [] as string[],
     is_active: true,
   });
   
@@ -64,6 +65,16 @@ const Admin = () => {
     link_url: '',
     is_active: true,
     display_order: 0,
+  });
+
+  // Hero settings form state
+  const [heroForm, setHeroForm] = useState({
+    image_url: '',
+    title: 'Miranda Costa Chic',
+    subtitle: 'Moda Feminina de Luxo',
+    cta_text: 'Explorar Coleção',
+    cta_link: '/loja',
+    is_active: true,
   });
 
   // Fetch products
@@ -94,6 +105,47 @@ const Admin = () => {
     enabled: isAdmin,
   });
 
+  // Fetch hero settings - usando client.from() sem tipos
+  const { data: heroSettings = null, refetch: refetchHeroSettings } = useQuery({
+    queryKey: ['admin-hero-settings'],
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('hero_settings')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true })
+          .limit(1)
+          .single();
+        
+        if (error) {
+          console.warn('Could not fetch hero settings:', error.message);
+          return null;
+        }
+        return data || null;
+      } catch (e) {
+        console.warn('Hero settings fetch error:', e);
+        return null;
+      }
+    },
+    enabled: isAdmin,
+    retry: false,
+  });
+
+  // Carregar hero settings quando disponível
+  useEffect(() => {
+    if (heroSettings) {
+      setHeroForm({
+        image_url: heroSettings.image_url || '',
+        title: heroSettings.title || 'Miranda Costa Chic',
+        subtitle: heroSettings.subtitle || 'Moda Feminina de Luxo',
+        cta_text: heroSettings.cta_text || 'Explorar Coleção',
+        cta_link: heroSettings.cta_link || '/loja',
+        is_active: heroSettings.is_active !== false,
+      });
+    }
+  }, [heroSettings]);
+
   // Product mutations
   const saveProduct = useMutation({
     mutationFn: async (product: any) => {
@@ -106,7 +158,7 @@ const Admin = () => {
         stock: parseInt(product.stock) || 0,
         sizes: product.sizes.split(',').map((s: string) => s.trim()).filter(Boolean),
         colors: product.colors.split(',').map((c: string) => c.trim()).filter(Boolean),
-        images: product.images.split(',').map((i: string) => i.trim()).filter(Boolean),
+        images: product.images,
         is_active: product.is_active,
       };
 
@@ -137,16 +189,39 @@ const Admin = () => {
 
   const deleteProduct = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('products').delete().eq('id', id);
+      // Ao invés de deletar, apenas desativamos o produto
+      // Isso preserva os históricos de pedidos que referenciam este produto
+      const { error } = await supabase
+        .from('products')
+        .update({ is_active: false })
+        .eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast.success('Produto removido!');
+      toast.success('Produto desativado!');
     },
     onError: (error: any) => {
       toast.error('Erro ao remover produto: ' + error.message);
+    },
+  });
+
+  const toggleProductStatus = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ is_active: !isActive })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success(isActive ? 'Produto desativado!' : 'Produto ativado!');
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao alterar status: ' + error.message);
     },
   });
 
@@ -202,10 +277,66 @@ const Admin = () => {
     },
   });
 
+  const saveHeroSettings = useMutation({
+    mutationFn: async (heroSettings: any) => {
+      if (!heroSettings.image_url) {
+        throw new Error('Imagem é obrigatória');
+      }
+
+      // Tenta atualizar primeiro (se já existe um hero ativo)
+      const { data: existingHero } = await supabase
+        .from('hero_settings')
+        .select('id')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+
+      if (existingHero) {
+        // Atualizar hero existente
+        const { error } = await supabase
+          .from('hero_settings')
+          .update({
+            image_url: heroSettings.image_url,
+            title: heroSettings.title,
+            subtitle: heroSettings.subtitle,
+            cta_text: heroSettings.cta_text,
+            cta_link: heroSettings.cta_link,
+            is_active: heroSettings.is_active,
+          })
+          .eq('id', existingHero.id);
+        if (error) throw error;
+      } else {
+        // Criar novo hero
+        const { error } = await supabase
+          .from('hero_settings')
+          .insert({
+            image_url: heroSettings.image_url,
+            title: heroSettings.title,
+            subtitle: heroSettings.subtitle,
+            cta_text: heroSettings.cta_text,
+            cta_link: heroSettings.cta_link,
+            is_active: heroSettings.is_active,
+            display_order: 0,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      // Invalidar queries para forçar recarga
+      queryClient.invalidateQueries({ queryKey: ['hero-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-hero-settings'] });
+      toast.success('Configurações da hero atualizadas com sucesso!');
+    },
+    onError: (error: any) => {
+      console.error('Hero save error:', error);
+      toast.error('Erro ao salvar configurações: ' + error.message);
+    },
+  });
+
   const resetProductForm = () => {
     setProductForm({
       name: '', description: '', category: 'Vestidos', price: '',
-      original_price: '', stock: '', sizes: '', colors: '', images: '', is_active: true,
+      original_price: '', stock: '', sizes: '', colors: '', images: [], is_active: true,
     });
     setEditingProduct(null);
   };
@@ -228,7 +359,7 @@ const Admin = () => {
       stock: product.stock.toString(),
       sizes: product.sizes?.join(', ') || '',
       colors: product.colors?.join(', ') || '',
-      images: product.images?.join(', ') || '',
+      images: product.images || [],
       is_active: product.is_active,
     });
     setProductDialog(true);
@@ -298,6 +429,10 @@ const Admin = () => {
             <TabsTrigger value="announcements" className="flex items-center gap-2">
               <Megaphone className="h-4 w-4" />
               Anúncios
+            </TabsTrigger>
+            <TabsTrigger value="hero" className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4" />
+              Hero
             </TabsTrigger>
           </TabsList>
           
@@ -387,7 +522,7 @@ const Admin = () => {
                             onChange={(e) => setProductForm(p => ({ ...p, sizes: e.target.value }))}
                           />
                         </div>
-                        <div>
+                        <div className="col-span-2">
                           <Label>Cores (separadas por vírgula)</Label>
                           <Input
                             placeholder="Azul, Branco, Rosa"
@@ -396,12 +531,59 @@ const Admin = () => {
                           />
                         </div>
                         <div className="col-span-2">
-                          <Label>URLs das Imagens (separadas por vírgula)</Label>
-                          <Textarea
-                            placeholder="https://exemplo.com/imagem1.jpg, https://exemplo.com/imagem2.jpg"
-                            value={productForm.images}
-                            onChange={(e) => setProductForm(p => ({ ...p, images: e.target.value }))}
-                          />
+                          <Label>Imagens</Label>
+                          <div className="space-y-2">
+                            {productForm.images.map((img, idx) => (
+                              <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded">
+                                <img
+                                  src={img}
+                                  alt={`Produto ${idx + 1}`}
+                                  className="w-10 h-10 object-cover rounded"
+                                />
+                                <span className="text-sm flex-1 truncate text-muted-foreground">{img}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setProductForm(p => ({
+                                    ...p,
+                                    images: p.images.filter((_, i) => i !== idx)
+                                  }))}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <div className="border-2 border-dashed border-border rounded-lg p-4">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    // Create a temporary URL for preview
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                      // Upload the image
+                                      const { uploadImageToSupabase } = await import('@/lib/image-upload');
+                                      const url = await uploadImageToSupabase(file, 'products');
+                                      if (url) {
+                                        setProductForm(p => ({
+                                          ...p,
+                                          images: [...p.images, url]
+                                        }));
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                                className="w-full"
+                              />
+                              <p className="text-xs text-muted-foreground text-center mt-2">
+                                PNG, JPG até 5MB
+                              </p>
+                            </div>
+                          </div>
                         </div>
                         <div className="col-span-2 flex items-center gap-2">
                           <Switch
@@ -444,7 +626,12 @@ const Admin = () => {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{product.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{product.name}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${product.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {product.is_active ? 'Ativo' : 'Inativo'}
+                            </span>
+                          </div>
                           <p className="text-sm text-muted-foreground">{product.category} • Estoque: {product.stock}</p>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-primary">{formatPrice(product.price)}</span>
@@ -456,17 +643,28 @@ const Admin = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-1 rounded ${product.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {product.is_active ? 'Ativo' : 'Inativo'}
-                          </span>
                           <Button variant="ghost" size="icon" onClick={() => openEditProduct(product)}>
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => toggleProductStatus.mutate({ id: product.id, isActive: product.is_active })}
+                            disabled={toggleProductStatus.isPending}
+                            title={product.is_active ? 'Desativar produto' : 'Ativar produto'}
+                          >
+                            {product.is_active ? (
+                              <Eye className="h-4 w-4" />
+                            ) : (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => deleteProduct.mutate(product.id)}
                             disabled={deleteProduct.isPending}
+                            title="Deletar produto permanentemente"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -511,12 +709,50 @@ const Admin = () => {
                         />
                       </div>
                       <div>
-                        <Label>URL da Imagem</Label>
-                        <Input
-                          placeholder="https://exemplo.com/banner.jpg"
-                          value={announcementForm.image_url}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, image_url: e.target.value }))}
-                        />
+                        <Label>Imagem do Anúncio</Label>
+                        <div className="border-2 border-dashed border-border rounded-lg p-4">
+                          {announcementForm.image_url && (
+                            <div className="mb-3">
+                              <img
+                                src={announcementForm.image_url}
+                                alt="Preview"
+                                className="w-full h-auto rounded"
+                              />
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setAnnouncementForm(a => ({ ...a, image_url: '' }))}
+                                className="mt-2 w-full"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Remover Imagem
+                              </Button>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                  const { uploadImageToSupabase } = await import('@/lib/image-upload');
+                                  const url = await uploadImageToSupabase(file, 'announcements');
+                                  if (url) {
+                                    setAnnouncementForm(a => ({ ...a, image_url: url }));
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground text-center mt-2">
+                            PNG, JPG até 5MB
+                          </p>
+                        </div>
                       </div>
                       <div>
                         <Label>Link (ao clicar)</Label>
@@ -600,6 +836,119 @@ const Admin = () => {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Hero Settings Tab */}
+          <TabsContent value="hero">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5" />
+                  Gerenciar Imagem Hero
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Form */}
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Imagem Hero *</Label>
+                      <ImageUpload
+                        label=""
+                        onImageUpload={(url) => setHeroForm(h => ({ ...h, image_url: url }))}
+                        currentImage={heroForm.image_url}
+                        folder="hero"
+                      />
+                      {heroForm.image_url && (
+                        <p className="text-sm text-muted-foreground mt-2">✓ Imagem selecionada</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label>Título</Label>
+                      <Input
+                        value={heroForm.title}
+                        onChange={(e) => setHeroForm(h => ({ ...h, title: e.target.value }))}
+                        placeholder="Miranda Costa Chic"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Subtítulo</Label>
+                      <Input
+                        value={heroForm.subtitle}
+                        onChange={(e) => setHeroForm(h => ({ ...h, subtitle: e.target.value }))}
+                        placeholder="Moda Feminina de Luxo"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Texto do Botão</Label>
+                      <Input
+                        value={heroForm.cta_text}
+                        onChange={(e) => setHeroForm(h => ({ ...h, cta_text: e.target.value }))}
+                        placeholder="Explorar Coleção"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Link do Botão</Label>
+                      <Input
+                        value={heroForm.cta_link}
+                        onChange={(e) => setHeroForm(h => ({ ...h, cta_link: e.target.value }))}
+                        placeholder="/loja"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={heroForm.is_active}
+                        onCheckedChange={(v) => setHeroForm(h => ({ ...h, is_active: v }))}
+                      />
+                      <Label>Ativo</Label>
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      onClick={() => saveHeroSettings.mutate(heroForm)}
+                      disabled={!heroForm.image_url || saveHeroSettings.isPending}
+                    >
+                      {saveHeroSettings.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                      Salvar Configurações
+                    </Button>
+                  </div>
+
+                  {/* Preview */}
+                  <div>
+                    <Label>Pré-visualização</Label>
+                    <div className="relative h-64 bg-muted rounded-lg overflow-hidden border-2 border-dashed border-border">
+                      {heroForm.image_url ? (
+                        <>
+                          <img
+                            src={heroForm.image_url}
+                            alt="Hero preview"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/20 to-background/90 flex items-center justify-center">
+                            <div className="text-center text-white">
+                              <h2 className="text-2xl font-serif mb-2">{heroForm.title}</h2>
+                              <p className="text-sm mb-4">{heroForm.subtitle}</p>
+                              <span className="px-4 py-2 bg-white text-primary rounded text-sm font-medium">
+                                {heroForm.cta_text}
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-muted-foreground">Selecione uma imagem para ver a pré-visualização</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

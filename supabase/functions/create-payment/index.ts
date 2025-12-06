@@ -16,37 +16,54 @@ serve(async (req) => {
     
     if (!accessToken) {
       console.error('MERCADO_PAGO_ACCESS_TOKEN not configured');
-      throw new Error('Payment gateway not configured');
+      return new Response(
+        JSON.stringify({ error: 'Payment gateway not configured' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        }
+      );
     }
 
-    const { items, payer, external_reference, back_urls } = await req.json();
+    const body = await req.json();
+    console.log('Request body:', JSON.stringify(body));
+
+    const { items, payer, external_reference, back_urls } = body;
+
+    if (!items || !payer || !external_reference) {
+      throw new Error('Missing required fields: items, payer, external_reference');
+    }
 
     console.log('Creating payment preference for:', external_reference);
     console.log('Items:', JSON.stringify(items));
 
     const preferenceData = {
       items: items.map((item: any) => ({
-        id: item.id,
-        title: item.title,
-        description: item.description || item.title,
+        id: item.id || item.product_name,
+        title: item.title || item.product_name,
+        description: item.description || item.title || 'Produto',
         picture_url: item.picture_url,
         quantity: item.quantity,
         currency_id: 'BRL',
-        unit_price: item.unit_price,
+        unit_price: parseFloat(item.unit_price),
       })),
       payer: {
-        email: payer.email,
-        name: payer.name || '',
+        email: payer.email || '',
+        name: payer.name || 'Cliente',
       },
-      back_urls: {
-        success: back_urls.success,
-        failure: back_urls.failure,
-        pending: back_urls.pending,
+      back_urls: back_urls ? {
+        success: back_urls.success || '',
+        failure: back_urls.failure || '',
+        pending: back_urls.pending || '',
+      } : {
+        success: 'https://example.com/success',
+        failure: 'https://example.com/failure',
+        pending: 'https://example.com/pending',
       },
       auto_return: 'approved',
       external_reference,
       statement_descriptor: 'MIRANDA COSTA',
-      notification_url: back_urls.notification,
+      notification_url: back_urls?.notification || '',
     };
 
     console.log('Preference data:', JSON.stringify(preferenceData));
@@ -64,7 +81,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       console.error('Mercado Pago API error:', JSON.stringify(data));
-      throw new Error(data.message || 'Failed to create payment preference');
+      return new Response(
+        JSON.stringify({ error: data.message || 'Failed to create payment preference', details: data }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: response.status,
+        }
+      );
     }
 
     console.log('Payment preference created:', data.id);
@@ -83,7 +106,7 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('Error creating payment:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || 'Internal server error' }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,

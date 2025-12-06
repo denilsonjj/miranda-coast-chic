@@ -15,6 +15,8 @@ const Home = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToCart } = useCart();
+  
+  const currentHeroImage = heroImage; // Usar imagem local por padrão
 
   // Fetch active announcements
   const { data: announcements = [] } = useQuery({
@@ -92,7 +94,7 @@ const Home = () => {
       <section className="relative h-[85vh] flex items-center justify-center overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${heroImage})` }}
+          style={{ backgroundImage: `url(${currentHeroImage})` }}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/20 to-background/90" />
         </div>

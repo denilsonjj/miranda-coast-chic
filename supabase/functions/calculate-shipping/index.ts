@@ -3,6 +3,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
 
 interface ShippingRequest {
@@ -113,14 +115,14 @@ serve(async (req: Request): Promise<Response> => {
 
     return new Response(JSON.stringify({ options: validOptions }), {
       status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: corsHeaders,
     });
 
   } catch (error: any) {
     console.error("Error calculating shipping:", error);
     return new Response(
       JSON.stringify({ error: error.message || "Failed to calculate shipping" }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      { status: 500, headers: corsHeaders }
     );
   }
 });

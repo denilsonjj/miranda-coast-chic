@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
-import { Loader2, ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check } from 'lucide-react';
 
 interface ShippingOption {
   id: string;
@@ -101,7 +100,7 @@ const Checkout = () => {
   const calculateShipping = async () => {
     if (!address.cep || address.cep.replace(/\D/g, '').length !== 8) {
       toast.error('Por favor, informe um CEP válido');
-      return;
+      return false;
     }
     
     setLoadingShipping(true);
@@ -126,26 +125,37 @@ const Checkout = () => {
       if (data.options && data.options.length > 0) {
         setShippingOptions(data.options);
         setSelectedShipping(data.options[0]);
+        // Agora avança para o próximo passo
+        setStep(2);
+        return true;
       } else {
         toast.error('Nenhuma opção de frete encontrada para este CEP');
+        return false;
       }
     } catch (error: any) {
       console.error('Shipping calculation error:', error);
       toast.error('Erro ao calcular frete. Tente novamente.');
+      return false;
     } finally {
       setLoadingShipping(false);
     }
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (step === 1) {
       if (!address.cep || !address.street || !address.number || !address.neighborhood || !address.city || !address.state) {
         toast.error('Por favor, preencha todos os campos obrigatórios');
         return;
       }
-      calculateShipping();
+      // calculateShipping já cuida de avançar para o próximo step
+      await calculateShipping();
+    } else if (step === 2) {
+      if (!selectedShipping) {
+        toast.error('Por favor, selecione uma opção de frete');
+        return;
+      }
+      setStep(3);
     }
-    setStep(step + 1);
   };
 
   const handleCreateOrder = async () => {
@@ -175,8 +185,19 @@ const Checkout = () => {
         .select()
         .single();
       
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error('Order creation error:', orderError);
+        toast.error(`Erro ao criar pedido: ${orderError.message}`);
+        setIsLoading(false);
+        return;
+      }
       
+      if (!order) {
+        toast.error('Pedido não foi criado');
+        setIsLoading(false);
+        return;
+      }
+
       const orderItems = cartItems.map(item => ({
         order_id: order.id,
         product_id: item.product_id,
@@ -184,67 +205,29 @@ const Checkout = () => {
         product_image: item.product.images?.[0] || null,
         price: item.product.price,
         quantity: item.quantity,
-        size: item.size,
-        color: item.color,
+        size: item.size || null,
+        color: item.color || null,
       }));
       
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(orderItems);
       
-      if (itemsError) throw itemsError;
-
-      // Create Mercado Pago payment
-      const baseUrl = window.location.origin;
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
-        body: {
-          items: cartItems.map(item => ({
-            id: item.product_id,
-            title: item.product.name,
-            quantity: item.quantity,
-            unit_price: item.product.price,
-            picture_url: item.product.images?.[0] || '',
-          })).concat([{
-            id: 'shipping',
-            title: `Frete - ${selectedShipping.company} ${selectedShipping.name}`,
-            quantity: 1,
-            unit_price: selectedShipping.price,
-            picture_url: '',
-          }]),
-          payer: {
-            email: user!.email,
-            name: user!.user_metadata?.full_name || '',
-          },
-          external_reference: order.id,
-          back_urls: {
-            success: `${baseUrl}/pedido/${order.id}?status=success`,
-            failure: `${baseUrl}/pedido/${order.id}?status=failure`,
-            pending: `${baseUrl}/pedido/${order.id}?status=pending`,
-          },
-        },
-      });
-
-      if (paymentError) {
-        console.error('Payment error:', paymentError);
-        toast.error('Erro ao criar pagamento. Você pode tentar pagar novamente na página do pedido.');
-        navigate(`/pedido/${order.id}`);
+      if (itemsError) {
+        console.error('Order items error:', itemsError);
+        toast.error(`Erro ao adicionar itens ao pedido: ${itemsError.message}`);
+        setIsLoading(false);
         return;
       }
 
+      // Clear cart and redirect to order page
       await clearCart.mutateAsync();
-      
-      // Redirect to Mercado Pago (use sandbox for test mode)
-      const redirectUrl = paymentData.sandbox_init_point || paymentData.init_point;
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-      } else {
-        toast.success('Pedido criado! Redirecionando para pagamento...');
-        navigate(`/pedido/${order.id}`);
-      }
+      toast.success('Pedido criado com sucesso!');
+      navigate(`/pedido/${order.id}`);
       
     } catch (error: any) {
       console.error('Order creation error:', error);
-      toast.error('Erro ao criar pedido. Tente novamente.');
+      toast.error(error.message || 'Erro ao criar pedido. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -253,7 +236,9 @@ const Checkout = () => {
   if (authLoading || cartLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center">
+          <div className="text-lg text-primary">Carregando...</div>
+        </div>
       </div>
     );
   }
@@ -380,43 +365,49 @@ const Checkout = () => {
                   <CardTitle className="font-serif">Opções de Frete</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {loadingShipping ? (
+                  {loadingShipping && (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      <span className="ml-2">Calculando frete...</span>
+                      <span className="text-primary">Calculando frete...</span>
                     </div>
-                  ) : shippingOptions.length === 0 ? (
+                  )}
+                  
+                  {!loadingShipping && shippingOptions.length === 0 && (
                     <div className="text-center py-8">
                       <p className="text-muted-foreground mb-4">Nenhuma opção de frete disponível</p>
                       <Button onClick={calculateShipping}>Tentar novamente</Button>
                     </div>
-                  ) : (
-                    <RadioGroup
-                      value={selectedShipping?.id}
-                      onValueChange={(value) => {
-                        const option = shippingOptions.find(o => o.id === value);
-                        if (option) setSelectedShipping(option);
-                      }}
-                    >
+                  )}
+                  
+                  {!loadingShipping && shippingOptions.length > 0 && (
+                    <div className="space-y-3">
                       {shippingOptions.map((option) => (
                         <div
                           key={option.id}
-                          className={`flex items-center space-x-4 p-4 border rounded-lg cursor-pointer transition-smooth ${
-                            selectedShipping?.id === option.id ? 'border-primary bg-primary/5' : 'border-border'
+                          className={`flex items-center space-x-4 p-4 border rounded-lg cursor-pointer transition-all ${
+                            selectedShipping?.id === option.id 
+                              ? 'border-primary bg-primary/5' 
+                              : 'border-border hover:border-primary/50'
                           }`}
                           onClick={() => setSelectedShipping(option)}
                         >
-                          <RadioGroupItem value={option.id} id={option.id} />
-                          <div className="flex-1">
+                          <input
+                            type="radio"
+                            name="shipping"
+                            value={option.id}
+                            checked={selectedShipping?.id === option.id}
+                            onChange={() => setSelectedShipping(option)}
+                            className="cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0">
                             <p className="font-medium">{option.company} - {option.name}</p>
                             <p className="text-sm text-muted-foreground">
                               Entrega em {option.delivery_range?.min || option.delivery_time} - {option.delivery_range?.max || option.delivery_time} dias úteis
                             </p>
                           </div>
-                          <p className="font-semibold text-primary">{formatPrice(option.price)}</p>
+                          <p className="font-semibold text-primary whitespace-nowrap ml-2">{formatPrice(option.price)}</p>
                         </div>
                       ))}
-                    </RadioGroup>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -443,25 +434,25 @@ const Checkout = () => {
             )}
             
             {/* Navigation buttons */}
-            <div className="flex justify-between mt-6">
-              {step > 1 ? (
+            <div className="flex gap-4 mt-6">
+              {step > 1 && (
                 <Button variant="outline" onClick={() => setStep(step - 1)}>
                   <ChevronLeft className="h-4 w-4 mr-2" />
                   Voltar
                 </Button>
-              ) : (
-                <div />
               )}
               
-              {step < 3 ? (
+              <div className="flex-1" />
+              
+              {step < 3 && (
                 <Button onClick={handleNextStep} disabled={loadingShipping}>
-                  {loadingShipping ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Continuar
                   <ChevronRight className="h-4 w-4 ml-2" />
                 </Button>
-              ) : (
+              )}
+              
+              {step === 3 && (
                 <Button onClick={handleCreateOrder} disabled={isLoading} className="bg-[#009ee3] hover:bg-[#007eb5]">
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Pagar com Mercado Pago
                 </Button>
               )}
