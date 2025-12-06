@@ -7,9 +7,9 @@ All colors MUST be HSL. */
 
 @layer base {
   :root {
-    /* Modern Boutique - Clean White & Ocean Blue with Cool Gray-Blues */
-    --background: 210 20% 99%;  /* Branco gelo puro */
-    --foreground: 210 15% 20%;  /* Cinza azulado muito escuro */
+    /* Coastal color palette - oceanic blues and sandy neutrals */
+    --background: 32 44% 97%;
+    --foreground: 210 22% 25%;
 
     --card: 0 0% 100%;  /* Branco puro */
     --card-foreground: 210 15% 20%;
@@ -21,13 +21,13 @@ All colors MUST be HSL. */
     --primary: 203 95% 40%;  /* Azul Oceano intenso */
     --primary-foreground: 0 0% 100%;
 
-    /* Cool Gray-Blue Secondary - modern, clean */
-    --secondary: 210 25% 88%;  /* Cinza azulado suave claro */
-    --secondary-foreground: 210 15% 20%;
+    /* Soft sandy secondary */
+    --secondary: 28 55% 92%;
+    --secondary-foreground: 210 22% 25%;
 
-    /* Soft Cool Gray for Muted Elements */
-    --muted: 210 20% 92%;  /* Cinza azulado muito suave */
-    --muted-foreground: 210 12% 45%;
+    /* Muted ocean mist */
+    --muted: 200 25% 94%;
+    --muted-foreground: 210 15% 50%;
 
     /* Accent - Cool Blue-Gray for highlights */
     --accent: 207 80% 50%;  /* Azul médio moderno */
@@ -36,17 +36,16 @@ All colors MUST be HSL. */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Cool Gray-Blue borders and inputs */
-    --border: 210 20% 90%;
-    --input: 210 20% 95%;
-    --ring: 203 95% 40%;
+    --border: 200 25% 88%;
+    --input: 200 25% 88%;
+    --ring: 203 89% 42%;
 
     --radius: 0.5rem;
 
-    /* Modern gradients - clean and sophisticated */
-    --gradient-ocean: linear-gradient(135deg, hsl(203 95% 40%) 0%, hsl(207 80% 55%) 100%);
-    --gradient-sand: linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 25% 92%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(203 95% 40%) 0%, hsl(207 80% 50%) 100%);
+    /* Gradients */
+    --gradient-ocean: linear-gradient(135deg, hsl(199 84% 88%) 0%, hsl(203 89% 65%) 100%);
+    --gradient-sand: linear-gradient(180deg, hsl(28 55% 96%) 0%, hsl(28 55% 92%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(203 89% 52%) 0%, hsl(199 84% 75%) 100%);
 
     /* Shadows with cool blue tint */
     --shadow-soft: 0 2px 8px -2px hsl(210 15% 20% / 0.06);

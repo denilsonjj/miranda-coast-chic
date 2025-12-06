@@ -36,10 +36,24 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm shadow-soft">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <h1 className="text-2xl md:text-3xl font-serif font-light tracking-wide text-primary">
-              Miranda Costa
+          {/* Mobile Menu Button - Left */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              aria-label="Toggle menu"
+            >
+              {isOpen ? (
+                <X className="h-6 w-6 text-foreground" />
+              ) : (
+                <Menu className="h-6 w-6 text-foreground" />
+              )}
+            </button>
+          </div>
+
+          {/* Logo - Centered on mobile */}
+          <Link to="/" className="flex items-center space-x-2 md:flex-none absolute left-1/2 transform -translate-x-1/2 md:static md:transform-none">
+            <h1 className="text-xl md:text-3xl font-serif font-light tracking-wide text-primary whitespace-nowrap">
+              Miranda Coast
             </h1>
           </Link>
 
@@ -91,19 +105,9 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Cart - Right on mobile */}
           <div className="flex items-center gap-2 md:hidden">
             <CartSheet />
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              aria-label="Toggle menu"
-            >
-              {isOpen ? (
-                <X className="h-6 w-6 text-foreground" />
-              ) : (
-                <Menu className="h-6 w-6 text-foreground" />
-              )}
-            </button>
           </div>
         </div>
 

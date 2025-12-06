@@ -6,7 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Package, ShoppingBag } from 'lucide-react';
+import { Loader2, Package, ShoppingBag, CreditCard } from 'lucide-react';
+import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -17,23 +18,11 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  pending: 'Pendente',
+  pending: 'Aguardando Pagamento',
   processing: 'Processando',
   shipped: 'Enviado',
   delivered: 'Entregue',
   cancelled: 'Cancelado',
-};
-
-const paymentStatusColors: Record<string, string> = {
-  pending: 'bg-yellow-50 border border-yellow-200 text-yellow-800',
-  paid: 'bg-green-50 border border-green-200 text-green-800',
-  failed: 'bg-red-50 border border-red-200 text-red-800',
-};
-
-const paymentStatusLabels: Record<string, string> = {
-  pending: 'Aguardando Pagamento',
-  paid: 'Pagamento Confirmado',
-  failed: 'Pagamento Recusado',
 };
 
 const MeusPedidos = () => {
@@ -78,6 +67,58 @@ const MeusPedidos = () => {
     });
   };
 
+  const handlePayOrder = async (orderId: string, total: number) => {
+    try {
+      const baseUrl = window.location.origin;
+      
+      // Get order items for payment
+      const { data: orderItems, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .eq('order_id', orderId);
+      
+      if (itemsError) throw itemsError;
+
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
+        body: {
+          items: orderItems?.map(item => ({
+            id: item.product_id,
+            title: item.product_name,
+            quantity: item.quantity,
+            unit_price: Number(item.price),
+            picture_url: item.product_image || '',
+          })) || [],
+          payer: {
+            email: user!.email,
+            name: user!.user_metadata?.full_name || '',
+          },
+          external_reference: orderId,
+          back_urls: {
+            success: `${baseUrl}/pedido/${orderId}?status=success`,
+            failure: `${baseUrl}/pedido/${orderId}?status=failure`,
+            pending: `${baseUrl}/pedido/${orderId}?status=pending`,
+          },
+        },
+      });
+
+      if (paymentError) {
+        console.error('Payment error:', paymentError);
+        toast.error('Erro ao criar pagamento. Tente novamente.');
+        return;
+      }
+
+      const redirectUrl = paymentData.sandbox_init_point || paymentData.init_point;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        toast.error('Erro ao obter link de pagamento');
+      }
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      toast.error('Erro ao processar pagamento');
+    }
+  };
+
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -109,16 +150,9 @@ const MeusPedidos = () => {
                     <CardTitle className="text-lg font-medium">
                       Pedido #{order.id.slice(0, 8)}
                     </CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      {/* Payment Status Badge */}
-                      <Badge className={`${paymentStatusColors[order.payment_status] || 'bg-gray-50 border border-gray-200 text-gray-800'} text-xs`}>
-                        {paymentStatusLabels[order.payment_status] || order.payment_status}
-                      </Badge>
-                      {/* Order Status Badge */}
-                      <Badge className={statusColors[order.status] || 'bg-gray-100 text-gray-800'}>
-                        {statusLabels[order.status] || order.status}
-                      </Badge>
-                    </div>
+                    <Badge className={statusColors[order.status] || 'bg-gray-100 text-gray-800'}>
+                      {statusLabels[order.status] || order.status}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -131,12 +165,6 @@ const MeusPedidos = () => {
                           {order.tracking_code ? `Rastreio: ${order.tracking_code}` : 'Aguardando envio'}
                         </span>
                       </div>
-                      {/* Alert for awaiting payment */}
-                      {order.payment_status === 'pending' && (
-                        <p className="text-xs text-yellow-700 mt-2 font-medium">
-                          ⚠️ Este pedido ainda está aguardando confirmação de pagamento no Mercado Pago.
-                        </p>
-                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-semibold text-primary">{formatPrice(order.total)}</p>

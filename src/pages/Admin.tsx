@@ -15,6 +15,7 @@ import { ImageUpload } from '@/components/ImageUpload';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { OrdersTab } from '@/components/admin/OrdersTab';
+import { ImageUpload } from '@/components/admin/ImageUpload';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const categories = ["Vestidos", "Conjuntos", "Blusas", "Croppeds", "Bodys", "Calças", "Saias"];
 
@@ -531,59 +543,12 @@ const Admin = () => {
                           />
                         </div>
                         <div className="col-span-2">
-                          <Label>Imagens</Label>
-                          <div className="space-y-2">
-                            {productForm.images.map((img, idx) => (
-                              <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded">
-                                <img
-                                  src={img}
-                                  alt={`Produto ${idx + 1}`}
-                                  className="w-10 h-10 object-cover rounded"
-                                />
-                                <span className="text-sm flex-1 truncate text-muted-foreground">{img}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setProductForm(p => ({
-                                    ...p,
-                                    images: p.images.filter((_, i) => i !== idx)
-                                  }))}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            <div className="border-2 border-dashed border-border rounded-lg p-4">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    // Create a temporary URL for preview
-                                    const reader = new FileReader();
-                                    reader.onload = async (event) => {
-                                      // Upload the image
-                                      const { uploadImageToSupabase } = await import('@/lib/image-upload');
-                                      const url = await uploadImageToSupabase(file, 'products');
-                                      if (url) {
-                                        setProductForm(p => ({
-                                          ...p,
-                                          images: [...p.images, url]
-                                        }));
-                                      }
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
-                                }}
-                                className="w-full"
-                              />
-                              <p className="text-xs text-muted-foreground text-center mt-2">
-                                PNG, JPG até 5MB
-                              </p>
-                            </div>
-                          </div>
+                          <Label>URLs das Imagens (separadas por vírgula)</Label>
+                          <Textarea
+                            placeholder="https://exemplo.com/imagem1.jpg, https://exemplo.com/imagem2.jpg"
+                            value={productForm.images}
+                            onChange={(e) => setProductForm(p => ({ ...p, images: e.target.value }))}
+                          />
                         </div>
                         <div className="col-span-2 flex items-center gap-2">
                           <Switch
@@ -649,22 +614,8 @@ const Admin = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => toggleProductStatus.mutate({ id: product.id, isActive: product.is_active })}
-                            disabled={toggleProductStatus.isPending}
-                            title={product.is_active ? 'Desativar produto' : 'Ativar produto'}
-                          >
-                            {product.is_active ? (
-                              <Eye className="h-4 w-4" />
-                            ) : (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
                             onClick={() => deleteProduct.mutate(product.id)}
                             disabled={deleteProduct.isPending}
-                            title="Deletar produto permanentemente"
                           >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -709,50 +660,12 @@ const Admin = () => {
                         />
                       </div>
                       <div>
-                        <Label>Imagem do Anúncio</Label>
-                        <div className="border-2 border-dashed border-border rounded-lg p-4">
-                          {announcementForm.image_url && (
-                            <div className="mb-3">
-                              <img
-                                src={announcementForm.image_url}
-                                alt="Preview"
-                                className="w-full h-auto rounded"
-                              />
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => setAnnouncementForm(a => ({ ...a, image_url: '' }))}
-                                className="mt-2 w-full"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Remover Imagem
-                              </Button>
-                            </div>
-                          )}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = async (event) => {
-                                  const { uploadImageToSupabase } = await import('@/lib/image-upload');
-                                  const url = await uploadImageToSupabase(file, 'announcements');
-                                  if (url) {
-                                    setAnnouncementForm(a => ({ ...a, image_url: url }));
-                                  }
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="w-full"
-                          />
-                          <p className="text-xs text-muted-foreground text-center mt-2">
-                            PNG, JPG até 5MB
-                          </p>
-                        </div>
+                        <Label>URL da Imagem</Label>
+                        <Input
+                          placeholder="https://exemplo.com/banner.jpg"
+                          value={announcementForm.image_url}
+                          onChange={(e) => setAnnouncementForm(a => ({ ...a, image_url: e.target.value }))}
+                        />
                       </div>
                       <div>
                         <Label>Link (ao clicar)</Label>
