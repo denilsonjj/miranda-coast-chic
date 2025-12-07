@@ -6,7 +6,7 @@ dist/
 build/
 
 # Environment
-
+.env
 
 # Logs
 npm-debug.log*

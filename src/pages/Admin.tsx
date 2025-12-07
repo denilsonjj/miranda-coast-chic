@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,14 +36,14 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
+  AlertDialogDescriçãon,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const defaultCategories = ['Vestidos','Conjuntos','Blusas','Croppeds','Bodys','Calcas','Saias'];
+const defaultCategories = ['Vestidos','Conjuntos','Blusas','Croppeds','Bodys','Calças','Saias'];
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -61,7 +61,7 @@ const Admin = () => {
   // Product form state
   const [productForm, setProductForm] = useState({
     name: '',
-    description: '',
+    Descriçãon: '',
     category: 'Vestidos',
     price: '',
     original_price: '',
@@ -75,7 +75,7 @@ const Admin = () => {
   // Announcement form state
   const [announcementForm, setAnnouncementForm] = useState({
     title: '',
-    description: '',
+    Descriçãon: '',
     image_url: '',
     link_url: '',
     is_active: true,
@@ -195,7 +195,7 @@ const Admin = () => {
     mutationFn: async (product: any) => {
       const productData = {
         name: product.name,
-        description: product.description,
+        Descriçãon: product.Descriçãon,
         category: product.category,
         price: parseFloat(product.price),
         original_price: product.original_price ? parseFloat(product.original_price) : null,
@@ -274,7 +274,7 @@ const Admin = () => {
     mutationFn: async (announcement: any) => {
       const announcementData = {
         title: announcement.title,
-        description: announcement.description,
+        Descriçãon: announcement.Descriçãon,
         image_url: announcement.image_url || null,
         link_url: announcement.link_url || null,
         is_active: announcement.is_active,
@@ -381,7 +381,7 @@ const Admin = () => {
   const saveCategory = useMutation({
     mutationFn: async (category: any) => {
       if (!category.name) {
-        throw new Error('Nome obrigat�rio');
+        throw new Error('Nome obrigatório');
       }
 
       const payload = {
@@ -434,7 +434,7 @@ const Admin = () => {
 
   const resetProductForm = () => {
     setProductForm({
-      name: '', description: '', category: productCategories[0] || 'Vestidos', price: '',
+      name: '', Descriçãon: '', category: productCategories[0] || 'Vestidos', price: '',
       original_price: '', stock: '', sizes: '', colors: '', images: [], is_active: true,
     });
     setEditingProduct(null);
@@ -442,7 +442,7 @@ const Admin = () => {
 
   const resetAnnouncementForm = () => {
     setAnnouncementForm({
-      title: '', description: '', image_url: '', link_url: '', is_active: true, display_order: 0,
+      title: '', Descriçãon: '', image_url: '', link_url: '', is_active: true, display_order: 0,
     });
     setEditingAnnouncement(null);
   };
@@ -462,7 +462,7 @@ const Admin = () => {
     setEditingProduct(product);
     setProductForm({
       name: product.name,
-      description: product.description || '',
+      Descriçãon: product.Descriçãon || '',
       category: product.category,
       price: product.price.toString(),
       original_price: product.original_price?.toString() || '',
@@ -479,7 +479,7 @@ const Admin = () => {
     setEditingAnnouncement(announcement);
     setAnnouncementForm({
       title: announcement.title,
-      description: announcement.description || '',
+      Descriçãon: announcement.Descriçãon || '',
       image_url: announcement.image_url || '',
       link_url: announcement.link_url || '',
       is_active: announcement.is_active,
@@ -533,29 +533,29 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
-      <div className="container mx-auto px-4">
-        <h1 className="text-3xl md:text-4xl font-serif mb-8">Painel Administrativo</h1>
+    <div className="min-h-screen bg-[#f7f4ef] pt-24 pb-12 px-4 sm:px-6 lg:px-10 flex flex-col gap-6">
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-6">
+        <h1 className="text-3xl md:text-4xl font-serif">Painel Administrativo</h1>
         
-        <Tabs defaultValue="orders" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="orders" className="flex items-center gap-2">
+        <Tabs defaultValue="orders" className="space-y-4 sm:space-y-6 w-full">
+          <TabsList className="w-full overflow-x-auto no-scrollbar flex gap-2 sm:gap-3 px-1 py-1 bg-white/70 backdrop-blur border rounded-lg">
+            <TabsTrigger value="orders" className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2">
               <ClipboardList className="h-4 w-4" />
               Pedidos
             </TabsTrigger>
-            <TabsTrigger value="products" className="flex items-center gap-2">
+            <TabsTrigger value="products" className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2">
               <Package className="h-4 w-4" />
               Produtos
             </TabsTrigger>
-            <TabsTrigger value="categories" className="flex items-center gap-2">
+            <TabsTrigger value="categories" className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2">
               <Layers className="h-4 w-4" />
               Categorias
             </TabsTrigger>
-            <TabsTrigger value="announcements" className="flex items-center gap-2">
+            <TabsTrigger value="announcements" className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2">
               <Megaphone className="h-4 w-4" />
               Anúncios
             </TabsTrigger>
-            <TabsTrigger value="hero" className="flex items-center gap-2">
+            <TabsTrigger value="hero" className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2">
               <ImageIcon className="h-4 w-4" />
               Hero
             </TabsTrigger>
@@ -568,23 +568,23 @@ const Admin = () => {
           
           {/* Products Tab */}
           <TabsContent value="products">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Produtos ({products.length})</CardTitle>
+            <Card className="shadow-sm sm:shadow-md bg-white/90 backdrop-blur border rounded-xl">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <CardTitle className="text-lg sm:text-xl font-serif">Produtos ({products.length})</CardTitle>
                 <Dialog open={productDialog} onOpenChange={(open) => {
                   setProductDialog(open);
                   if (!open) resetProductForm();
                 }}>
                   <DialogTrigger asChild>
-                    <Button><Plus className="h-4 w-4 mr-2" />Novo Produto</Button>
+                    <Button className="w-full sm:w-auto"><Plus className="h-4 w-4 mr-2" />Novo Produto</Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogContent className="sm:max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                     <DialogHeader>
-                      <DialogTitle>{editingProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
+                      <DialogTitle className="text-lg sm:text-xl">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2">
+                    <div className="space-y-4 py-2 sm:py-4">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                        <div className="col-span-1 lg:col-span-2 space-y-2">
                           <Label>Nome *</Label>
                           <Input
                             value={productForm.name}
@@ -594,8 +594,8 @@ const Admin = () => {
                         <div className="col-span-2">
                           <Label>Descrição</Label>
                           <Textarea
-                            value={productForm.description}
-                            onChange={(e) => setProductForm(p => ({ ...p, description: e.target.value }))}
+                            value={productForm.Descriçãon}
+                            onChange={(e) => setProductForm(p => ({ ...p, Descriçãon: e.target.value }))}
                           />
                         </div>
                         <div>
@@ -710,7 +710,7 @@ const Admin = () => {
                               {product.is_active ? 'Ativo' : 'Inativo'}
                             </span>
                           </div>
-                          <p className="text-sm text-muted-foreground">{product.category} • Estoque: {product.stock}</p>
+                          <p className="text-sm text-muted-foreground">{product.category} â€¢ Estoque: {product.stock}</p>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-primary">{formatPrice(product.price)}</span>
                             {product.original_price && (
@@ -762,7 +762,27 @@ const Admin = () => {
             />
           </TabsContent>
 
-          {/* Hero Settings Tab */}          {/* Hero Settings Tab */}
+          {/* Announcements Tab */}
+          <TabsContent value="announcements">
+            <AnnouncementsTab
+              announcements={announcements}
+              isLoading={announcementsLoading}
+              dialogOpen={announcementDialog}
+              setDialogOpen={(open) => {
+                setAnnouncementDialog(open);
+                if (!open) resetAnnouncementForm();
+              }}
+              announcementForm={announcementForm}
+              setAnnouncementForm={setAnnouncementForm}
+              editingAnnouncement={editingAnnouncement}
+              openEditAnnouncement={openEditAnnouncement}
+              resetAnnouncementForm={resetAnnouncementForm}
+              saveAnnouncement={saveAnnouncement}
+              deleteAnnouncement={deleteAnnouncement}
+            />
+          </TabsContent>
+
+          {/* Hero Settings Tab */}
           <TabsContent value="hero">
             <Card>
               <CardHeader>
@@ -784,7 +804,7 @@ const Admin = () => {
                         folder="hero"
                       />
                       {heroForm.image_url && (
-                        <p className="text-sm text-muted-foreground mt-2">✓ Imagem selecionada</p>
+                        <p className="text-sm text-muted-foreground mt-2">âœ“ Imagem selecionada</p>
                       )}
                     </div>
 
@@ -881,3 +901,8 @@ const Admin = () => {
 };
 
 export default Admin;
+
+
+
+
+
