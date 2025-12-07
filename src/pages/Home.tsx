@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Waves, Heart, Sparkles, ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
+import { Waves, Heart, Sparkles, ChevronLeft, ChevronRight, ShoppingBag, Loader2, Megaphone } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import heroImage from "@/assets/hero-beach.jpg";
 import { useCart } from "@/hooks/useCart";
@@ -15,8 +15,51 @@ const Home = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToCart } = useCart();
-  
-  const currentHeroImage = heroImage; // Usar imagem local por padrão
+
+  const { data: heroSettings } = useQuery({
+    queryKey: ['hero-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hero_settings')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+        .limit(1);
+
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+  });
+
+  const currentHeroImage = heroSettings?.image_url || heroImage;
+  const heroTitle = heroSettings?.title || "Descubra seu estilo";
+  const heroSubtitle = heroSettings?.subtitle || "Moda feminina delicada e moderna, inspirada pela beleza do litoral";
+  const heroCtaText = heroSettings?.cta_text || "Ver Novidades";
+  const heroCtaLink = heroSettings?.cta_link || "/novidades";
+
+  const defaultCategories = [
+    { name: "Vestidos", image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&q=80" },
+    { name: "Conjuntos", image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80" },
+    { name: "Blusas", image: "https://images.unsplash.com/photo-1564557287817-3785e38ec1f5?w=800&q=80" },
+    { name: "CalÇõas", image: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=800&q=80" },
+  ];
+
+  const { data: categoriesData = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const categories = categoriesData.length > 0 ? categoriesData : defaultCategories;
 
   // Fetch active announcements
   const { data: announcements = [] } = useQuery({
@@ -47,12 +90,6 @@ const Home = () => {
     },
   });
 
-  const categories = [
-    { name: "Vestidos", image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&q=80" },
-    { name: "Conjuntos", image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80" },
-    { name: "Blusas", image: "https://images.unsplash.com/photo-1564557287817-3785e38ec1f5?w=800&q=80" },
-    { name: "Calças", image: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=800&q=80" },
-  ];
 
   const values = [
     {
@@ -101,16 +138,21 @@ const Home = () => {
 
         <div className="relative z-10 text-center px-4 max-w-3xl mx-auto">
           <h1 className="text-5xl md:text-7xl font-serif mb-6 text-white animate-fade-in">
-            Descubra seu estilo
+            {heroTitle}
           </h1>
           <p className="text-lg md:text-xl text-white/90 mb-8 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            Moda feminina delicada e moderna, inspirada pela beleza do litoral
+            {heroSubtitle}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <Button size="lg" asChild className="bg-white text-primary hover:bg-white/90">
-              <Link to="/novidades">Ver Novidades</Link>
+              <Link to={heroCtaLink}>{heroCtaText}</Link>
             </Button>
-            <Button size="lg" variant="outline" asChild className="border-white text-white hover:bg-white/10">
+            <Button
+              size="lg"
+              variant="outline"
+              asChild
+              className="border-white/80 bg-white/5 text-white hover:bg-white/20 hover:text-white"
+            >
               <Link to="/loja">Explorar Loja</Link>
             </Button>
           </div>
@@ -119,8 +161,12 @@ const Home = () => {
 
       {/* Announcements Carousel */}
       {announcements.length > 0 && (
-        <section className="py-6 bg-primary/5">
+        <section className="py-12 bg-primary/5">
           <div className="container mx-auto px-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl md:text-3xl font-serif">Destaques e promoções</h2>
+              <div className="text-sm text-muted-foreground">Arraste para navegar</div>
+            </div>
             <Carousel
               opts={{
                 align: "start",
@@ -130,51 +176,46 @@ const Home = () => {
             >
               <CarouselContent>
                 {announcements.map((announcement: any) => (
-                  <CarouselItem key={announcement.id} className="md:basis-1/2 lg:basis-1/3">
-                    {announcement.link_url ? (
-                      <Link to={announcement.link_url} className="block">
-                        <Card className="border-none shadow-medium hover:shadow-large transition-smooth overflow-hidden">
-                          {announcement.image_url && (
-                            <div className="aspect-[16/9] overflow-hidden">
-                              <img
-                                src={announcement.image_url}
-                                alt={announcement.title}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          )}
-                          <CardContent className={`${announcement.image_url ? 'p-4' : 'p-6'}`}>
-                            <h3 className="font-serif text-lg font-medium">{announcement.title}</h3>
-                            {announcement.description && (
-                              <p className="text-sm text-muted-foreground mt-1">{announcement.description}</p>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    ) : (
-                      <Card className="border-none shadow-medium overflow-hidden">
-                        {announcement.image_url && (
-                          <div className="aspect-[16/9] overflow-hidden">
-                            <img
-                              src={announcement.image_url}
-                              alt={announcement.title}
-                              className="w-full h-full object-cover"
-                            />
+                  <CarouselItem key={announcement.id} className="md:basis-2/3 lg:basis-1/2">
+                    <Card className="relative overflow-hidden border-none shadow-large rounded-2xl bg-gradient-to-br from-background to-primary/10">
+                      <div className="aspect-[16/9] w-full overflow-hidden">
+                        {announcement.image_url ? (
+                          <img
+                            src={announcement.image_url}
+                            alt={announcement.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-muted">
+                            <Megaphone className="h-10 w-10 text-muted-foreground" />
                           </div>
                         )}
-                        <CardContent className={`${announcement.image_url ? 'p-4' : 'p-6'}`}>
-                          <h3 className="font-serif text-lg font-medium">{announcement.title}</h3>
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15" />
+                      <div className="absolute inset-0 p-6 md:p-10 flex flex-col justify-between text-white">
+                        <div className="space-y-2 max-w-xl">
+                          <p className="text-xs uppercase tracking-[0.2em] text-white/70">Anúncio</p>
+                          <h3 className="text-2xl md:text-3xl font-serif leading-tight">{announcement.title}</h3>
                           {announcement.description && (
-                            <p className="text-sm text-muted-foreground mt-1">{announcement.description}</p>
+                            <p className="text-sm md:text-base text-white/80 line-clamp-3">
+                              {announcement.description}
+                            </p>
                           )}
-                        </CardContent>
-                      </Card>
-                    )}
+                        </div>
+                        <div className="flex gap-3 items-center">
+                          {announcement.link_url ? (
+                            <Button asChild className="bg-white text-primary hover:bg-white/90">
+                              <Link to={announcement.link_url}>Ver detalhes</Link>
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Card>
                   </CarouselItem>
                 ))}
               </CarouselContent>
-              <CarouselPrevious className="left-2" />
-              <CarouselNext className="right-2" />
+              <CarouselPrevious className="left-2 bg-white/80 backdrop-blur border-none shadow-md text-primary hover:bg-white" />
+              <CarouselNext className="right-2 bg-white/80 backdrop-blur border-none shadow-md text-primary hover:bg-white" />
             </Carousel>
           </div>
         </section>
@@ -242,27 +283,42 @@ const Home = () => {
       {/* Categories */}
       <section className="container mx-auto px-4 py-16">
         <h2 className="text-4xl md:text-5xl font-serif text-center mb-12">Categorias</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {categories.map((category, index) => (
-            <Link
-              key={category.name}
-              to="/loja"
-              className="group relative overflow-hidden rounded-lg shadow-medium hover:shadow-large transition-smooth"
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              <div className="aspect-[3/4] overflow-hidden">
-                <img
-                  src={category.image}
-                  alt={category.name}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
-                />
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex items-end">
-                <h3 className="text-2xl font-serif text-white p-6">{category.name}</h3>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {categoriesLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6">
+            {categories.map((category: any, index) => {
+              const image = category.image_url || category.image;
+              return (
+                <Link
+                  key={category.name}
+                  to="/loja"
+                  className="group relative overflow-hidden rounded-lg shadow-medium hover:shadow-large transition-smooth"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <div className="aspect-[3/4] overflow-hidden">
+                    {image ? (
+                      <img
+                        src={image}
+                        alt={category.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <ShoppingBag className="h-10 w-10 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex items-end">
+                    <h3 className="text-2xl font-serif text-white p-6">{category.name}</h3>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Values */}

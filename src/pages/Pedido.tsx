@@ -111,6 +111,20 @@ const Pedido = () => {
 
   const handlePayWithMercadoPago = async () => {
     if (!order) return;
+
+    // Validação rápida no cliente antes de chamar a função
+    const invalidItem = order.items.find(
+      (item) =>
+        !item.product_name ||
+        !item.quantity ||
+        Number(item.quantity) <= 0 ||
+        item.price === undefined ||
+        Number(item.price) <= 0
+    );
+    if (invalidItem) {
+      toast.error('Itens do pedido inválidos para pagamento (nome, quantidade > 0 e preço > 0 são obrigatórios).');
+      return;
+    }
     
     setIsPaymentLoading(true);
     try {
@@ -120,8 +134,9 @@ const Pedido = () => {
           items: order.items.map(item => ({
             id: item.id,
             title: item.product_name,
-            quantity: item.quantity,
-            unit_price: item.price,
+            quantity: Number(item.quantity) || 1,
+            unit_price: Number(item.price) || 0,
+            picture_url: item.product_image || undefined,
           })),
           payer: {
             email: user?.email || '',
@@ -138,7 +153,14 @@ const Pedido = () => {
 
       if (error) {
         console.error('Payment error:', error);
-        toast.error('Erro ao processar pagamento. Tente novamente.');
+        toast.error(error.message || 'Erro ao processar pagamento. Verifique os dados e tente novamente.');
+        setIsPaymentLoading(false);
+        return;
+      }
+
+      if (data?.error) {
+        console.error('Payment backend error:', data);
+        toast.error(data.error || 'Erro ao processar pagamento. Verifique as credenciais do Mercado Pago.');
         setIsPaymentLoading(false);
         return;
       }
@@ -155,7 +177,25 @@ const Pedido = () => {
       }
     } catch (error: any) {
       console.error('Payment creation error:', error);
-      toast.error(error.message || 'Erro ao processar pagamento');
+      // Tentar extrair mensagem detalhada da função edge (Supabase FunctionsHttpError)
+      try {
+        const contextResponse = (error as any)?.context?.response;
+        if (contextResponse?.json) {
+          const json = await contextResponse.json();
+          if (json?.error) {
+            toast.error(json.error);
+          } else {
+            toast.error(error.message || 'Erro ao processar pagamento');
+          }
+        } else if (contextResponse?.text) {
+          const text = await contextResponse.text();
+          toast.error(text || 'Erro ao processar pagamento');
+        } else {
+          toast.error(error.message || 'Erro ao processar pagamento');
+        }
+      } catch {
+        toast.error(error.message || 'Erro ao processar pagamento');
+      }
       setIsPaymentLoading(false);
     }
   };

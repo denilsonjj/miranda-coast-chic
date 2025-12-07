@@ -11,10 +11,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { ImageUpload } from '@/components/ImageUpload';
 import { toast } from 'sonner';
-import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit, Package, Megaphone, ShieldAlert, ClipboardList, Eye, EyeOff, Image as ImageIcon, Layers } from 'lucide-react';
 import { OrdersTab } from '@/components/admin/OrdersTab';
-import { ImageUpload } from '@/components/admin/ImageUpload';
+import { AnnouncementsTab } from '@/pages/admin/tabs/AnnouncementsTab';
+import { CategoriesTab } from '@/pages/admin/tabs/CategoriesTab';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +43,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const categories = ["Vestidos", "Conjuntos", "Blusas", "Croppeds", "Bodys", "Calças", "Saias"];
+const defaultCategories = ['Vestidos','Conjuntos','Blusas','Croppeds','Bodys','Calcas','Saias'];
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -51,8 +53,10 @@ const Admin = () => {
   
   const [productDialog, setProductDialog] = useState(false);
   const [announcementDialog, setAnnouncementDialog] = useState(false);
+  const [categoryDialog, setCategoryDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
+  const [editingCategory, setEditingCategory] = useState<any>(null);
   
   // Product form state
   const [productForm, setProductForm] = useState({
@@ -76,6 +80,13 @@ const Admin = () => {
     link_url: '',
     is_active: true,
     display_order: 0,
+  });
+
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    image_url: '',
+    display_order: 0,
+    is_active: true,
   });
 
   // Hero settings form state
@@ -142,6 +153,28 @@ const Admin = () => {
     enabled: isAdmin,
     retry: false,
   });
+
+  const { data: categoryList = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['admin-categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
+
+  const productCategories = categoryList.length ? categoryList.map((cat: any) => cat.name) : defaultCategories;
+
+  useEffect(() => {
+    if (!editingProduct && productCategories.length && !productCategories.includes(productForm.category)) {
+      setProductForm(p => ({ ...p, category: productCategories[0] }));
+    }
+  }, [productCategories, editingProduct]);
 
   // Carregar hero settings quando disponível
   useEffect(() => {
@@ -344,9 +377,64 @@ const Admin = () => {
     },
   });
 
+
+  const saveCategory = useMutation({
+    mutationFn: async (category: any) => {
+      if (!category.name) {
+        throw new Error('Nome obrigat�rio');
+      }
+
+      const payload = {
+        name: category.name,
+        image_url: category.image_url || null,
+        display_order: category.display_order || 0,
+        is_active: category.is_active,
+      };
+
+      if (editingCategory) {
+        const { error } = await supabase
+          .from('categories')
+          .update(payload)
+          .eq('id', editingCategory.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('categories').insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setCategoryDialog(false);
+      resetCategoryForm();
+      toast.success(editingCategory ? 'Categoria atualizada!' : 'Categoria criada!');
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao salvar categoria: ' + error.message);
+    },
+  });
+
+  const toggleCategoryStatus = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from('categories')
+        .update({ is_active: !isActive })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success(isActive ? 'Categoria desativada!' : 'Categoria ativada!');
+    },
+    onError: (error: any) => {
+      toast.error('Erro ao alterar categoria: ' + error.message);
+    },
+  });
+
   const resetProductForm = () => {
     setProductForm({
-      name: '', description: '', category: 'Vestidos', price: '',
+      name: '', description: '', category: productCategories[0] || 'Vestidos', price: '',
       original_price: '', stock: '', sizes: '', colors: '', images: [], is_active: true,
     });
     setEditingProduct(null);
@@ -358,6 +446,17 @@ const Admin = () => {
     });
     setEditingAnnouncement(null);
   };
+
+  const resetCategoryForm = () => {
+    setCategoryForm({
+      name: '',
+      image_url: '',
+      display_order: 0,
+      is_active: true,
+    });
+    setEditingCategory(null);
+  };
+
 
   const openEditProduct = (product: any) => {
     setEditingProduct(product);
@@ -387,6 +486,17 @@ const Admin = () => {
       display_order: announcement.display_order,
     });
     setAnnouncementDialog(true);
+  };
+
+  const openEditCategory = (category: any) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      image_url: category.image_url || '',
+      display_order: category.display_order || 0,
+      is_active: category.is_active,
+    });
+    setCategoryDialog(true);
   };
 
   const formatPrice = (price: number) => {
@@ -436,6 +546,10 @@ const Admin = () => {
             <TabsTrigger value="products" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Produtos
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Categorias
             </TabsTrigger>
             <TabsTrigger value="announcements" className="flex items-center gap-2">
               <Megaphone className="h-4 w-4" />
@@ -492,7 +606,7 @@ const Admin = () => {
                           >
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {categories.map(cat => (
+                              {productCategories.map(cat => (
                                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                               ))}
                             </SelectContent>
@@ -613,10 +727,14 @@ const Admin = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteProduct.mutate(product.id)}
-                            disabled={deleteProduct.isPending}
+                            onClick={() => toggleProductStatus.mutate({ id: product.id, isActive: product.is_active })}
+                            disabled={toggleProductStatus.isPending}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            {product.is_active ? (
+                              <EyeOff className="h-4 w-4 text-destructive" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-green-600" />
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -627,132 +745,24 @@ const Admin = () => {
             </Card>
           </TabsContent>
           
-          {/* Announcements Tab */}
-          <TabsContent value="announcements">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Anúncios e Promoções ({announcements.length})</CardTitle>
-                <Dialog open={announcementDialog} onOpenChange={(open) => {
-                  setAnnouncementDialog(open);
-                  if (!open) resetAnnouncementForm();
-                }}>
-                  <DialogTrigger asChild>
-                    <Button><Plus className="h-4 w-4 mr-2" />Novo Anúncio</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>{editingAnnouncement ? 'Editar Anúncio' : 'Novo Anúncio'}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div>
-                        <Label>Título *</Label>
-                        <Input
-                          value={announcementForm.title}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, title: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label>Descrição</Label>
-                        <Textarea
-                          value={announcementForm.description}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, description: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label>URL da Imagem</Label>
-                        <Input
-                          placeholder="https://exemplo.com/banner.jpg"
-                          value={announcementForm.image_url}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, image_url: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label>Link (ao clicar)</Label>
-                        <Input
-                          placeholder="/loja ou https://..."
-                          value={announcementForm.link_url}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, link_url: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label>Ordem de exibição</Label>
-                        <Input
-                          type="number"
-                          value={announcementForm.display_order}
-                          onChange={(e) => setAnnouncementForm(a => ({ ...a, display_order: parseInt(e.target.value) || 0 }))}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={announcementForm.is_active}
-                          onCheckedChange={(v) => setAnnouncementForm(a => ({ ...a, is_active: v }))}
-                        />
-                        <Label>Anúncio ativo</Label>
-                      </div>
-                      <Button
-                        className="w-full"
-                        onClick={() => saveAnnouncement.mutate(announcementForm)}
-                        disabled={saveAnnouncement.isPending || !announcementForm.title}
-                      >
-                        {saveAnnouncement.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                        {editingAnnouncement ? 'Salvar Alterações' : 'Criar Anúncio'}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </CardHeader>
-              <CardContent>
-                {announcementsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                  </div>
-                ) : announcements.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Nenhum anúncio cadastrado</p>
-                ) : (
-                  <div className="space-y-3">
-                    {announcements.map((announcement: any) => (
-                      <div key={announcement.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                        <div className="w-24 h-16 bg-muted rounded overflow-hidden flex-shrink-0">
-                          {announcement.image_url ? (
-                            <img src={announcement.image_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Megaphone className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{announcement.title}</p>
-                          {announcement.description && (
-                            <p className="text-sm text-muted-foreground truncate">{announcement.description}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground">Ordem: {announcement.display_order}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-1 rounded ${announcement.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {announcement.is_active ? 'Ativo' : 'Inativo'}
-                          </span>
-                          <Button variant="ghost" size="icon" onClick={() => openEditAnnouncement(announcement)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteAnnouncement.mutate(announcement.id)}
-                            disabled={deleteAnnouncement.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {/* Categories Tab */}
+          <TabsContent value="categories">
+            <CategoriesTab
+              categories={categoryList}
+              isLoading={categoriesLoading}
+              dialogOpen={categoryDialog}
+              setDialogOpen={setCategoryDialog}
+              categoryForm={categoryForm}
+              setCategoryForm={setCategoryForm}
+              editingCategory={editingCategory}
+              openEditCategory={openEditCategory}
+              resetCategoryForm={resetCategoryForm}
+              saveCategory={saveCategory}
+              toggleCategoryStatus={toggleCategoryStatus}
+            />
           </TabsContent>
 
-          {/* Hero Settings Tab */}
+          {/* Hero Settings Tab */}          {/* Hero Settings Tab */}
           <TabsContent value="hero">
             <Card>
               <CardHeader>

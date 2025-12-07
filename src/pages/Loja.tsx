@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/hooks/useCart';
-import { Loader2, ShoppingBag, Filter } from 'lucide-react';
+import { Loader2, ShoppingBag, Filter, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -15,18 +15,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from '@/components/ui/input';
 
-const categories = ["Todos", "Vestidos", "Conjuntos", "Blusas", "Croppeds", "Bodys", "Calças", "Saias"];
+const defaultCategories = ["Todos", "Vestidos", "Conjuntos", "Blusas", "Croppeds", "Bodys", "Calcas", "Saias"];
 
 const Loja = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToCart } = useCart();
-  const [selectedCategory, setSelectedCategory] = useState("Todos");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || "Todos");
   const [isAddingToCart, setIsAddingToCart] = useState<string | null>(null);
 
+  const { data: categoriesData = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  useEffect(() => {
+    setSearchTerm(searchParams.get('q') || '');
+    setSelectedCategory(searchParams.get('category') || "Todos");
+  }, [searchParams]);
+
+  const categoryOptions = ['Todos', ...(categoriesData.length ? categoriesData.map((cat: any) => cat.name) : defaultCategories.filter(c => c !== 'Todos'))];
+
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ['products', selectedCategory],
+    queryKey: ['products', selectedCategory, (searchTerm || '').trim()],
     queryFn: async () => {
       let query = supabase
         .from('products')
@@ -36,6 +61,11 @@ const Loja = () => {
       
       if (selectedCategory !== "Todos") {
         query = query.eq('category', selectedCategory);
+      }
+
+      const searchFilter = (searchTerm || '').trim();
+      if (searchFilter) {
+        query = query.or(`name.ilike.%${searchFilter}%,description.ilike.%${searchFilter}%,category.ilike.%${searchFilter}%`);
       }
       
       const { data, error } = await query;
@@ -66,6 +96,23 @@ const Loja = () => {
     }
   };
 
+  const applyFiltersToParams = (category: string, term: string) => {
+    const params: Record<string, string> = {};
+    if (term.trim()) params.q = term.trim();
+    if (category !== "Todos") params.category = category;
+    setSearchParams(params);
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    applyFiltersToParams(value, searchTerm);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    applyFiltersToParams(selectedCategory, searchTerm);
+  };
+
   return (
     <div className="min-h-screen pt-24">
       <div className="container mx-auto px-4 py-12">
@@ -79,20 +126,35 @@ const Loja = () => {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <form onSubmit={handleSearchSubmit} className="flex flex-1 min-w-[260px] items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}n
+                placeholder="Buscar por nome, descrição ou categoria"
+                className="pl-10"
+              />
+            </div>
+            <Button type="submit" variant="outline">
+              Buscar
+            </Button>
+          </form>
+
           <div className="flex items-center gap-2">
             <Filter className="h-5 w-5 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Filtrar por:</span>
+            <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryOptions.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Products */}

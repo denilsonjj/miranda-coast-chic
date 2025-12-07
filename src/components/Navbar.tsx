@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Menu, X, User, LogOut, Shield } from "lucide-react";
+import { Menu, X, User, LogOut, Shield, Waves, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdmin } from "@/hooks/useAdmin";
 import CartSheet from "./CartSheet";
@@ -15,6 +16,7 @@ import {
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
@@ -30,6 +32,13 @@ const Navbar = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const term = searchTerm.trim();
+    if (!term) return;
+    navigate(`/loja?q=${encodeURIComponent(term)}`);
   };
 
   return (
@@ -51,14 +60,15 @@ const Navbar = () => {
           </div>
 
           {/* Logo - Centered on mobile */}
-          <Link to="/" className="flex items-center space-x-2 md:flex-none absolute left-1/2 transform -translate-x-1/2 md:static md:transform-none">
-            <h1 className="text-xl md:text-3xl font-serif font-light tracking-wide text-primary whitespace-nowrap">
+          <Link to="/" className="flex items-center gap-2 md:flex-none absolute left-1/2 transform -translate-x-1/2 md:static md:transform-none">
+            <Waves className="h-7 w-7 text-primary" />
+            <span className="text-xl md:text-3xl font-serif font-light tracking-wide text-primary whitespace-nowrap">
               Miranda Coast
-            </h1>
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-6">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
@@ -68,7 +78,19 @@ const Navbar = () => {
                 {link.name}
               </Link>
             ))}
-            
+
+            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar produtos"
+                  className="pl-10"
+                />
+              </div>
+            </form>
+
             <CartSheet />
             
             {user ? (
