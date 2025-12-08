@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,8 @@ serve(async (req) => {
 
   try {
     const accessToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!accessToken) {
       console.error("MERCADO_PAGO_ACCESS_TOKEN not configured");
       return new Response(
@@ -216,6 +219,34 @@ serve(async (req) => {
       }
 
       console.log("Payment created:", data.id, data.status);
+
+      // Atualiza pedido com o status inicial e o id do pagamento
+      if (supabaseUrl && supabaseServiceKey) {
+        try {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          let payment_status: string = "pending";
+          let status: string = "pending";
+          if (data.status === "approved") {
+            payment_status = "paid";
+            status = "confirmed";
+          } else if (data.status === "rejected" || data.status === "cancelled") {
+            payment_status = "failed";
+            status = "failed";
+          }
+
+          await supabase
+            .from("orders")
+            .update({
+              payment_status,
+              status,
+              mercado_pago_payment_id: data.id?.toString?.() || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", external_reference);
+        } catch (err) {
+          console.error("Error updating order status after payment:", err);
+        }
+      }
 
       return new Response(
         JSON.stringify({

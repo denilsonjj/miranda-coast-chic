@@ -103,6 +103,32 @@ const Pedido = () => {
     fetchOrder();
   }, [id, user, navigate]);
 
+  // Polling simples para atualizar status de pagamento enquanto pendente
+  useEffect(() => {
+    if (!id || !user) return;
+    if (!order || order.payment_status !== 'pending') return;
+
+    const interval = setInterval(async () => {
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (orderError || !orderData) return;
+
+      setOrder({
+        ...orderData,
+        shipping_address: orderData.shipping_address as Order['shipping_address'],
+        shipping_service: orderData.shipping_service as Order['shipping_service'],
+        items: order?.items || [],
+      });
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [id, user, order]);
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
