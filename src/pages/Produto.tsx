@@ -62,6 +62,11 @@ const ProductDetails = () => {
       return;
     }
 
+    if (product?.colors && product.colors.length > 0 && !selectedColor) {
+      toast.error('Por favor, selecione uma cor');
+      return;
+    }
+
     if (!user) {
       toast.error('Você precisa estar logado para adicionar ao carrinho');
       navigate('/auth');
@@ -235,6 +240,9 @@ const ProductDetails = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                {!selectedColor && (
+                  <p className="text-xs text-red-500">Selecione uma cor para continuar</p>
+                )}
               </div>
             )}
 
@@ -273,7 +281,8 @@ const ProductDetails = () => {
                 disabled={
                   isAddingToCart ||
                   !product.is_active ||
-                  (product.sizes && product.sizes.length > 0 && !selectedSize)
+                  (product.sizes && product.sizes.length > 0 && !selectedSize) ||
+                  (product.colors && product.colors.length > 0 && !selectedColor)
                 }
               >
                 {isAddingToCart ? (

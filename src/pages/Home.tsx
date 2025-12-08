@@ -116,13 +116,26 @@ const Home = () => {
     }).format(price);
   };
 
-  const handleAddToCart = (productId: string) => {
+  const requiresSelection = (product: any) => {
+    return (product?.sizes && product.sizes.length > 0) || (product?.colors && product.colors.length > 0);
+  };
+
+  const handleAddToCart = (product: any) => {
     if (!user) {
       toast.error('Faça login para adicionar ao carrinho');
       navigate('/auth');
       return;
     }
-    addToCart.mutate({ productId });
+
+    if (requiresSelection(product)) {
+      toast.message('Selecione tamanho e cor para adicionar', {
+        description: 'Vamos abrir a página do produto.',
+      });
+      navigate(`/produto/${product.id}`);
+      return;
+    }
+
+    addToCart.mutate({ productId: product.id });
   };
 
   return (
@@ -268,7 +281,7 @@ const Home = () => {
                   <Button 
                     className="w-full" 
                     size="sm"
-                    onClick={() => handleAddToCart(product.id)}
+                    onClick={() => handleAddToCart(product)}
                     disabled={addToCart.isPending || product.stock === 0}
                   >
                     {product.stock === 0 ? 'Esgotado' : 'Adicionar'}

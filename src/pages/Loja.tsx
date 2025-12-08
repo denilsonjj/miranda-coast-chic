@@ -81,16 +81,28 @@ const Loja = () => {
     }).format(price);
   };
 
-  const handleAddToCart = async (productId: string) => {
+  const requiresSelection = (product: any) => {
+    return (product?.sizes && product.sizes.length > 0) || (product?.colors && product.colors.length > 0);
+  };
+
+  const handleAddToCart = async (product: any) => {
     if (!user) {
       toast.error('Faça login para adicionar ao carrinho');
       navigate('/auth');
       return;
     }
     
-    setIsAddingToCart(productId);
+    if (requiresSelection(product)) {
+      toast.message('Selecione tamanho e cor para adicionar', {
+        description: 'Abrindo detalhes do produto.',
+      });
+      navigate(`/produto/${product.id}`);
+      return;
+    }
+    
+    setIsAddingToCart(product.id);
     try {
-      await addToCart.mutateAsync({ productId });
+      await addToCart.mutateAsync({ productId: product.id });
     } finally {
       setIsAddingToCart(null);
     }
@@ -131,7 +143,7 @@ const Loja = () => {
               <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}n
+                onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Buscar por nome, descrição ou categoria"
                 className="pl-10"
               />
@@ -219,7 +231,7 @@ const Loja = () => {
                       className="flex-1" 
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleAddToCart(product.id);
+                        handleAddToCart(product);
                       }}
                       disabled={isAddingToCart === product.id || product.stock === 0}
                       size="sm"

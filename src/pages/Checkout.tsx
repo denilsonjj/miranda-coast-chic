@@ -17,6 +17,17 @@ interface ShippingOption {
   price: number;
   delivery_time: number;
   delivery_range: { min: number; max: number };
+  pickup?: boolean;
+  address?: {
+    name?: string;
+    street?: string;
+    number?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    phone?: string;
+  };
 }
 
 interface Address {
@@ -29,7 +40,7 @@ interface Address {
   state: string;
 }
 
-const ORIGIN_CEP = '01310100'; // São Paulo - Av Paulista
+const ORIGIN_CEP = import.meta.env.VITE_ORIGIN_CEP || '01310100'; // CEP da loja/origem
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -169,7 +180,6 @@ const Checkout = () => {
     try {
       const orderTotal = cartTotal + selectedShipping.price;
       
-      // Create order first
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -187,7 +197,7 @@ const Checkout = () => {
       
       if (orderError) {
         console.error('Order creation error:', orderError);
-        toast.error(`Erro ao criar pedido: ${orderError.message}`);
+        toast.error('Erro ao criar pedido: ' + orderError.message);
         setIsLoading(false);
         return;
       }
@@ -215,15 +225,62 @@ const Checkout = () => {
       
       if (itemsError) {
         console.error('Order items error:', itemsError);
-        toast.error(`Erro ao adicionar itens ao pedido: ${itemsError.message}`);
+        toast.error('Erro ao adicionar itens ao pedido: ' + itemsError.message);
         setIsLoading(false);
         return;
       }
 
-      // Clear cart and redirect to order page
       await clearCart.mutateAsync();
-      toast.success('Pedido criado com sucesso!');
-      navigate(`/pedido/${order.id}`);
+
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
+        body: {
+          external_reference: order.id,
+          items: orderItems.map(item => ({
+            id: item.product_id,
+            title: item.product_name,
+            quantity: item.quantity,
+            unit_price: item.price,
+            picture_url: item.product_image || undefined,
+            description: [item.size ? 'Tam: ' + item.size : null, item.color ? 'Cor: ' + item.color : null]
+              .filter(Boolean)
+              .join(' | ') || undefined,
+          })),
+          payer: {
+            email: user?.email || '',
+            name: user?.email?.split('@')[0] || 'Cliente',
+          },
+          back_urls: {
+            success: window.location.origin + '/pedido/' + order.id,
+            failure: window.location.origin + '/pedido/' + order.id,
+            pending: window.location.origin + '/pedido/' + order.id,
+            notification: window.location.origin + '/api/webhook/mercado-pago',
+          },
+        },
+      });
+
+      if (paymentError) {
+        console.error('Payment error:', paymentError);
+        toast.error('Pedido criado, mas houve erro ao iniciar o pagamento. Você pode tentar novamente na página do pedido.');
+        navigate('/pedido/' + order.id);
+        return;
+      }
+
+      if (paymentData?.error) {
+        console.error('Payment creation error:', paymentData);
+        toast.error(paymentData.error || 'Não foi possível iniciar o pagamento. Acesse o pedido para tentar novamente.');
+        navigate('/pedido/' + order.id);
+        return;
+      }
+
+      const redirectUrl = paymentData?.init_point || paymentData?.sandbox_init_point;
+      if (redirectUrl) {
+        toast.message('Redirecionando para pagamento seguro...');
+        window.location.href = redirectUrl;
+        return;
+      }
+      
+      toast.error('Não foi possível abrir o checkout. Acesse o pedido para tentar novamente.');
+      navigate('/pedido/' + order.id);
       
     } catch (error: any) {
       console.error('Order creation error:', error);
