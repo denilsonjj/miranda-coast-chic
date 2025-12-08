@@ -49,7 +49,7 @@ serve(async (req) => {
             title: "Frete",
             description: "Frete",
             quantity: 1,
-            unit_price: shippingAmount,
+            unit_price: Math.round(Number(shippingAmount) * 100) / 100,
           }]
         : []),
     ];
@@ -172,11 +172,14 @@ serve(async (req) => {
         (sum: number, item: any) => sum + Number(item.unit_price) * Number(item.quantity),
         0,
       );
+      const normalizedTransactionAmount = Math.round(transactionAmount * 100) / 100;
+      console.log("Items with shipping:", JSON.stringify(itemsWithShipping));
+      console.log("Calculated transaction_amount:", normalizedTransactionAmount);
 
       console.log("Creating direct payment for:", external_reference, "method:", payment_method_id);
 
       const paymentPayload: any = {
-        transaction_amount: transactionAmount,
+        transaction_amount: normalizedTransactionAmount,
         description: items?.[0]?.title || "Pedido",
         payment_method_id,
         payer: {
@@ -197,7 +200,7 @@ serve(async (req) => {
             description: item.description || item.title || "Produto",
             picture_url: item.picture_url,
             quantity: item.quantity,
-            unit_price: parseFloat(item.unit_price),
+            unit_price: Math.round(Number(item.unit_price) * 100) / 100,
           })),
         },
       };
