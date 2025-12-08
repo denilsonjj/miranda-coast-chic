@@ -104,7 +104,7 @@ const Checkout = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!cartLoading && cartItems.length === 0 && user) {
+    if (!cartLoading && cartItems.length === 0 && user && !orderId && !paymentResult) {
       navigate('/loja');
       toast.error('Seu carrinho está vazio');
     }

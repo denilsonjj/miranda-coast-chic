@@ -367,22 +367,9 @@ const Pedido = () => {
                 <p className="text-sm text-muted-foreground mb-4">
                   Escolha sua forma de pagamento. Você será redirecionado para o Mercado Pago de forma segura.
                 </p>
-                <Button 
-                  onClick={handlePayWithMercadoPago}
-                  disabled={isPaymentLoading}
-                  className="w-full bg-[#009ee3] hover:bg-[#007eb5]"
-                >
-                  {isPaymentLoading ? (
-                    <>
-                      Processando...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Pagar com Mercado Pago
-                    </>
-                  )}
-                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Se o pagamento foi iniciado na tela anterior (Pix/Boleto/Cartão), aguarde a confirmação. Caso queira tentar de novo, volte ao checkout.
+                </p>
               </div>
             )}
 
