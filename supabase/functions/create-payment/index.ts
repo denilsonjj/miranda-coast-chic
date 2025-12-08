@@ -25,11 +25,30 @@ serve(async (req) => {
     const body = await req.json();
     console.log("Request body:", JSON.stringify(body));
 
-    const { items, payer, external_reference, back_urls } = body;
+    const {
+      items,
+      payer,
+      external_reference,
+      back_urls,
+      payment_method_id,
+      token,
+      installments,
+    } = body;
 
-    if (!items || !Array.isArray(items) || items.length === 0 || !payer || !external_reference) {
+    const isPreferenceFlow = !payment_method_id;
+
+    if (
+      !items ||
+      !Array.isArray(items) ||
+      items.length === 0 ||
+      !payer ||
+      !external_reference
+    ) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: items (array), payer, external_reference" }),
+        JSON.stringify({
+          error:
+            "Missing required fields: items (array), payer, external_reference",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
       );
     }
@@ -63,69 +82,149 @@ serve(async (req) => {
       requestUrlOrigin ||
       "https://example.com";
 
-    console.log("Creating payment preference for:", external_reference);
-    console.log("Items:", JSON.stringify(items));
+    if (isPreferenceFlow) {
+      console.log("Creating payment preference for:", external_reference);
+      console.log("Items:", JSON.stringify(items));
 
-    const preferenceData = {
-      items: items.map((item: any) => ({
-        id: item.id || item.product_name,
-        title: item.title || item.product_name,
-        description: item.description || item.title || "Produto",
-        picture_url: item.picture_url,
-        quantity: item.quantity,
-        currency_id: "BRL",
-        unit_price: parseFloat(item.unit_price),
-      })),
-      payer: {
-        email: payer.email || "",
-        name: payer.name || "Cliente",
-      },
-      back_urls: {
-        success: back_urls?.success?.trim() || `${baseUrl}/pedido/${external_reference}`,
-        failure: back_urls?.failure?.trim() || `${baseUrl}/pedido/${external_reference}`,
-        pending: back_urls?.pending?.trim() || `${baseUrl}/pedido/${external_reference}`,
-      },
-      auto_return: "approved",
-      external_reference,
-      statement_descriptor: "MIRANDA COSTA",
-      notification_url: back_urls?.notification || baseUrl,
-    };
+      const preferenceData = {
+        items: items.map((item: any) => ({
+          id: item.id || item.product_name,
+          title: item.title || item.product_name,
+          description: item.description || item.title || "Produto",
+          picture_url: item.picture_url,
+          quantity: item.quantity,
+          currency_id: "BRL",
+          unit_price: parseFloat(item.unit_price),
+        })),
+        payer: {
+          email: payer.email || "",
+          name: payer.name || "Cliente",
+        },
+        back_urls: {
+          success: back_urls?.success?.trim() || `${baseUrl}/pedido/${external_reference}`,
+          failure: back_urls?.failure?.trim() || `${baseUrl}/pedido/${external_reference}`,
+          pending: back_urls?.pending?.trim() || `${baseUrl}/pedido/${external_reference}`,
+        },
+        auto_return: "approved",
+        external_reference,
+        statement_descriptor: "MIRANDA COAST",
+        notification_url: back_urls?.notification || baseUrl,
+      };
 
-    console.log("Preference data:", JSON.stringify(preferenceData));
+      const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(preferenceData),
+      });
 
-    const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(preferenceData),
-    });
+      const data = await response.json();
 
-    const data = await response.json();
+      if (!response.ok) {
+        console.error("Mercado Pago API error:", JSON.stringify(data));
+        return new Response(
+          JSON.stringify({
+            error: data.message || "Failed to create payment preference",
+            details: data,
+            status: response.status,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: response.status },
+        );
+      }
 
-    if (!response.ok) {
-      console.error("Mercado Pago API error:", JSON.stringify(data));
+      console.log("Payment preference created:", data.id);
+
       return new Response(
         JSON.stringify({
-          error: data.message || "Failed to create payment preference",
-          details: data,
-          status: response.status,
+          id: data.id,
+          init_point: data.init_point,
+          sandbox_init_point: data.sandbox_init_point,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: response.status },
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      );
+    } else {
+      const transactionAmount = items.reduce(
+        (sum: number, item: any) => sum + Number(item.unit_price) * Number(item.quantity),
+        0,
+      );
+
+      console.log("Creating direct payment for:", external_reference, "method:", payment_method_id);
+
+      const paymentPayload: any = {
+        transaction_amount: transactionAmount,
+        description: items?.[0]?.title || "Pedido",
+        payment_method_id,
+        payer: {
+          email: payer.email || "",
+          first_name: payer.name || "Cliente",
+          identification: {
+            type: payer.document_type || "CPF",
+            number: payer.document || "",
+          },
+        },
+        external_reference,
+        statement_descriptor: payer.statement_descriptor || "MIRANDA COAST",
+        notification_url: back_urls?.notification?.trim() || baseUrl,
+        additional_info: {
+          items: items.map((item: any) => ({
+            id: item.id || item.product_name,
+            title: item.title || item.product_name,
+            description: item.description || item.title || "Produto",
+            picture_url: item.picture_url,
+            quantity: item.quantity,
+            unit_price: parseFloat(item.unit_price),
+          })),
+        },
+      };
+
+      if (token) {
+        paymentPayload.token = token;
+      }
+
+      if (installments) {
+        paymentPayload.installments = Number(installments);
+      }
+
+      const response = await fetch("https://api.mercadopago.com/v1/payments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(paymentPayload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Mercado Pago API error:", JSON.stringify(data));
+        return new Response(
+          JSON.stringify({
+            error: data.message || "Failed to create payment",
+            details: data,
+            status: response.status,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: response.status },
+        );
+      }
+
+      console.log("Payment created:", data.id, data.status);
+
+      return new Response(
+        JSON.stringify({
+          id: data.id,
+          status: data.status,
+          status_detail: data.status_detail,
+          point_of_interaction: data.point_of_interaction,
+          qr_code: data.point_of_interaction?.transaction_data?.qr_code || null,
+          qr_code_base64: data.point_of_interaction?.transaction_data?.qr_code_base64 || null,
+          ticket_url: data.point_of_interaction?.transaction_data?.ticket_url || null,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }
-
-    console.log("Payment preference created:", data.id);
-
-    return new Response(
-      JSON.stringify({
-        id: data.id,
-        init_point: data.init_point,
-        sandbox_init_point: data.sandbox_init_point,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
-    );
   } catch (error: any) {
     console.error("Error creating payment:", error);
     return new Response(JSON.stringify({ error: error.message || "Internal server error" }), {

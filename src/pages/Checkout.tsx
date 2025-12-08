@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/hooks/useCart';
@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check, Copy } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 
 interface ShippingOption {
   id: string;
@@ -40,15 +42,24 @@ interface Address {
   state: string;
 }
 
-const ORIGIN_CEP = import.meta.env.VITE_ORIGIN_CEP || '88348225'; // CEP da loja/origem
+type PaymentMethod = 'pix' | 'card' | 'boleto';
+
+const ORIGIN_CEP = import.meta.env.VITE_ORIGIN_CEP || '88348225';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const DEFAULT_WEBHOOK_URL = SUPABASE_URL
-  ? `${SUPABASE_URL.replace('https://', 'https://').replace('.supabase.co', '.functions.supabase.co')}/payment-webhook`
+  ? `${SUPABASE_URL.replace('.supabase.co', '.functions.supabase.co')}/payment-webhook`
   : '';
 const MERCADO_PAGO_WEBHOOK =
   import.meta.env.VITE_MERCADO_PAGO_WEBHOOK_URL ||
   DEFAULT_WEBHOOK_URL ||
   `${window.location.origin}/api/webhook/mercado-pago`;
+const MERCADO_PAGO_PUBLIC_KEY = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY || '';
+
+declare global {
+  interface Window {
+    MercadoPago?: any;
+  }
+}
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -57,8 +68,8 @@ const Checkout = () => {
   
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   
-  // Address state
   const [address, setAddress] = useState<Address>({
     cep: '',
     street: '',
@@ -69,10 +80,22 @@ const Checkout = () => {
     state: '',
   });
   
-  // Shipping state
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
   const [loadingShipping, setLoadingShipping] = useState(false);
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
+  const [payerName, setPayerName] = useState(user?.user_metadata?.full_name || '');
+  const [payerEmail, setPayerEmail] = useState(user?.email || '');
+  const [payerDocument, setPayerDocument] = useState('');
+  const [paymentResult, setPaymentResult] = useState<any>(null);
+  const [cardFormError, setCardFormError] = useState('');
+  const mpRef = useRef<any>(null);
+  const cardFormRef = useRef<any>(null);
+  const [mpScriptLoaded, setMpScriptLoaded] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+
+  const total = useMemo(() => cartTotal + (selectedShipping?.price || 0), [cartTotal, selectedShipping]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -86,6 +109,64 @@ const Checkout = () => {
       toast.error('Seu carrinho está vazio');
     }
   }, [cartItems, cartLoading, user, navigate]);
+
+  useEffect(() => {
+    if (step === 3 && paymentMethod === 'card' && MERCADO_PAGO_PUBLIC_KEY) {
+      if (mpRef.current) return;
+      const script = document.createElement('script');
+      script.src = 'https://sdk.mercadopago.com/js/v2';
+      script.async = true;
+      script.onload = () => setMpScriptLoaded(true);
+      script.onerror = () => toast.error('Erro ao carregar o SDK do Mercado Pago');
+      document.body.appendChild(script);
+      return () => {
+        document.body.removeChild(script);
+      };
+    }
+  }, [step, paymentMethod]);
+
+  useEffect(() => {
+    if (!mpScriptLoaded || paymentMethod !== 'card' || !MERCADO_PAGO_PUBLIC_KEY) return;
+    if (!window.MercadoPago) return;
+    try {
+      mpRef.current = new window.MercadoPago(MERCADO_PAGO_PUBLIC_KEY, { locale: 'pt-BR' });
+      const cardForm = mpRef.current.cardForm({
+        amount: total.toFixed(2),
+        autoMount: true,
+        form: {
+          id: 'payment-form',
+          cardholderName: { id: 'form-cardholderName', placeholder: 'Nome do titular' },
+          cardholderEmail: { id: 'form-cardholderEmail', placeholder: 'Email do titular' },
+          cardNumber: { id: 'form-cardNumber', placeholder: 'Número do cartão' },
+          cardExpirationMonth: { id: 'form-cardExpirationMonth', placeholder: 'MM' },
+          cardExpirationYear: { id: 'form-cardExpirationYear', placeholder: 'YY' },
+          securityCode: { id: 'form-securityCode', placeholder: 'CVV' },
+          installments: { id: 'form-installments' },
+          identificationType: { id: 'form-identificationType' },
+          identificationNumber: { id: 'form-identificationNumber', placeholder: 'CPF/CNPJ' },
+          issuer: { id: 'form-issuer' },
+        },
+        callbacks: {
+          onFormMounted: (error: any) => {
+            if (error) {
+              console.warn('Card form mounted error', error);
+              setCardFormError('Erro ao montar o formulário do cartão.');
+            } else {
+              setCardFormError('');
+            }
+          },
+          onError: (error: any) => {
+            console.warn('Card form error', error);
+            setCardFormError('Verifique os dados do cartão.');
+          },
+        },
+      });
+      cardFormRef.current = cardForm;
+    } catch (e) {
+      console.error('Erro ao iniciar MP', e);
+      toast.error('Erro ao iniciar pagamento com cartão');
+    }
+  }, [mpScriptLoaded, paymentMethod, total]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -144,7 +225,6 @@ const Checkout = () => {
       if (data.options && data.options.length > 0) {
         setShippingOptions(data.options);
         setSelectedShipping(data.options[0]);
-        // Agora avança para o próximo passo
         setStep(2);
         return true;
       } else {
@@ -166,7 +246,6 @@ const Checkout = () => {
         toast.error('Por favor, preencha todos os campos obrigatórios');
         return;
       }
-      // calculateShipping já cuida de avançar para o próximo step
       await calculateShipping();
     } else if (step === 2) {
       if (!selectedShipping) {
@@ -182,11 +261,21 @@ const Checkout = () => {
       toast.error('Selecione uma opção de frete');
       return;
     }
+    if (!payerName || !payerEmail || !payerDocument) {
+      toast.error('Informe nome, e-mail e CPF/CNPJ para pagar');
+      return;
+    }
+    if (paymentMethod === 'card' && !MERCADO_PAGO_PUBLIC_KEY) {
+      toast.error('Chave pública do Mercado Pago não configurada');
+      return;
+    }
     
     setIsLoading(true);
+    setIsPaying(true);
+    setPaymentResult(null);
     
     try {
-      const orderTotal = cartTotal + selectedShipping.price;
+      const orderTotal = cartTotal + (selectedShipping?.price || 0);
       
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -207,14 +296,18 @@ const Checkout = () => {
         console.error('Order creation error:', orderError);
         toast.error('Erro ao criar pedido: ' + orderError.message);
         setIsLoading(false);
+        setIsPaying(false);
         return;
       }
       
       if (!order) {
         toast.error('Pedido não foi criado');
         setIsLoading(false);
+        setIsPaying(false);
         return;
       }
+
+      setOrderId(order.id);
 
       const orderItems = cartItems.map(item => ({
         order_id: order.id,
@@ -235,10 +328,34 @@ const Checkout = () => {
         console.error('Order items error:', itemsError);
         toast.error('Erro ao adicionar itens ao pedido: ' + itemsError.message);
         setIsLoading(false);
+        setIsPaying(false);
         return;
       }
 
-      await clearCart.mutateAsync();
+      let paymentMethodId = paymentMethod === 'pix' ? 'pix' : paymentMethod === 'boleto' ? 'bolbradesco' : undefined;
+      let token: string | undefined;
+      let installments: number | undefined;
+      let identificationType = payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF';
+
+      if (paymentMethod === 'card') {
+        if (!cardFormRef.current?.getCardFormData) {
+          toast.error('Formulário do cartão não iniciado');
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+        const cardData = cardFormRef.current.getCardFormData();
+        token = cardData.token;
+        paymentMethodId = cardData.paymentMethodId;
+        installments = Number(cardData.installments) || 1;
+        identificationType = cardData.identificationType || identificationType;
+        if (!token || !paymentMethodId) {
+          toast.error('Dados do cartão incompletos');
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+      }
 
       const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment', {
         body: {
@@ -254,8 +371,11 @@ const Checkout = () => {
               .join(' | ') || undefined,
           })),
           payer: {
-            email: user?.email || '',
-            name: user?.email?.split('@')[0] || 'Cliente',
+            email: payerEmail,
+            name: payerName,
+            document: payerDocument.replace(/\D/g, ''),
+            document_type: identificationType,
+            statement_descriptor: 'Miranda Coast',
           },
           back_urls: {
             success: window.location.origin + '/pedido/' + order.id,
@@ -263,13 +383,18 @@ const Checkout = () => {
             pending: window.location.origin + '/pedido/' + order.id,
             notification: MERCADO_PAGO_WEBHOOK,
           },
+          payment_method_id: paymentMethodId,
+          token,
+          installments,
         },
       });
 
       if (paymentError) {
         console.error('Payment error:', paymentError);
-        toast.error('Pedido criado, mas houve erro ao iniciar o pagamento. Você pode tentar novamente na página do pedido.');
+        toast.error('Pedido criado, mas houve erro ao iniciar o pagamento. Tente novamente.');
         navigate('/pedido/' + order.id);
+        setIsLoading(false);
+        setIsPaying(false);
         return;
       }
 
@@ -277,24 +402,21 @@ const Checkout = () => {
         console.error('Payment creation error:', paymentData);
         toast.error(paymentData.error || 'Não foi possível iniciar o pagamento. Acesse o pedido para tentar novamente.');
         navigate('/pedido/' + order.id);
+        setIsLoading(false);
+        setIsPaying(false);
         return;
       }
 
-      const redirectUrl = paymentData?.init_point || paymentData?.sandbox_init_point;
-      if (redirectUrl) {
-        toast.message('Redirecionando para pagamento seguro...');
-        window.location.href = redirectUrl;
-        return;
-      }
-      
-      toast.error('Não foi possível abrir o checkout. Acesse o pedido para tentar novamente.');
-      navigate('/pedido/' + order.id);
-      
+      setPaymentResult(paymentData);
+      await clearCart.mutateAsync();
+
+      toast.success('Pagamento iniciado. Verifique o status ou finalize pelo QR/Boleto.');
     } catch (error: any) {
       console.error('Order creation error:', error);
       toast.error(error.message || 'Erro ao criar pedido. Tente novamente.');
     } finally {
       setIsLoading(false);
+      setIsPaying(false);
     }
   };
 
@@ -308,14 +430,11 @@ const Checkout = () => {
     );
   }
 
-  const total = cartTotal + (selectedShipping?.price || 0);
-
   return (
     <div className="min-h-screen pt-24 pb-12 bg-secondary/20">
       <div className="container max-w-4xl px-4">
         <h1 className="text-3xl md:text-4xl font-serif mb-8 text-center">Checkout</h1>
         
-        {/* Steps indicator */}
         <div className="flex items-center justify-center mb-8">
           {[
             { num: 1, icon: MapPin, label: 'Endereço' },
@@ -337,8 +456,8 @@ const Checkout = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {/* Main content */}
           <div className="md:col-span-2">
+            {/* Step 1 */}
             {step === 1 && (
               <Card>
                 <CardHeader>
@@ -353,7 +472,7 @@ const Checkout = () => {
                         placeholder="00000-000"
                         value={address.cep}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          const value = e.target.value.replace(/\\D/g, '').slice(0, 8);
                           setAddress(prev => ({ ...prev, cep: value }));
                           if (value.length === 8) fetchAddressByCep(value);
                         }}
@@ -423,7 +542,8 @@ const Checkout = () => {
                 </CardContent>
               </Card>
             )}
-            
+
+            {/* Step 2 */}
             {step === 2 && (
               <Card>
                 <CardHeader>
@@ -477,28 +597,149 @@ const Checkout = () => {
                 </CardContent>
               </Card>
             )}
-            
+
+            {/* Step 3 */}
             {step === 3 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="font-serif">Pagamento</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 bg-secondary/30 rounded-lg">
-                    <CreditCard className="h-12 w-12 mx-auto mb-4 text-primary" />
-                    <p className="font-medium mb-2">Pague com Mercado Pago</p>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Você será redirecionado para o Mercado Pago para concluir o pagamento de forma segura.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Cartão de crédito, débito, Pix e boleto disponíveis
-                    </p>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nome *</Label>
+                      <Input value={payerName} onChange={(e) => setPayerName(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Email *</Label>
+                      <Input value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>CPF/CNPJ *</Label>
+                      <Input
+                        value={payerDocument}
+                        onChange={(e) => setPayerDocument(e.target.value.replace(/\\D/g, ''))}
+                        placeholder="Apenas números"
+                      />
+                    </div>
                   </div>
+
+                  <Tabs value={paymentMethod} onValueChange={(v: string) => { setPaymentMethod(v as PaymentMethod); setPaymentResult(null); }}>
+                    <TabsList className="grid grid-cols-3">
+                      <TabsTrigger value="pix">Pix</TabsTrigger>
+                      <TabsTrigger value="card">Cartão</TabsTrigger>
+                      <TabsTrigger value="boleto">Boleto</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="pix" className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Geraremos um QR Code Pix para pagamento imediato.</p>
+                    </TabsContent>
+
+                    <TabsContent value="boleto" className="space-y-3">
+                      <p className="text-sm text-muted-foreground">Geraremos um boleto. O pedido ficará pendente até o pagamento ser compensado.</p>
+                    </TabsContent>
+
+                    <TabsContent value="card" className="space-y-4">
+                      {!MERCADO_PAGO_PUBLIC_KEY && (
+                        <p className="text-sm text-red-500">Defina VITE_MERCADO_PAGO_PUBLIC_KEY para habilitar cartão.</p>
+                      )}
+                      <form id="payment-form" className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label htmlFor="form-cardholderName">Nome no cartão</Label>
+                            <Input id="form-cardholderName" />
+                          </div>
+                          <div>
+                            <Label htmlFor="form-cardholderEmail">Email do titular</Label>
+                            <Input id="form-cardholderEmail" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label htmlFor="form-cardNumber">Número do cartão</Label>
+                          <Input id="form-cardNumber" />
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <Label htmlFor="form-cardExpirationMonth">Mês</Label>
+                            <Input id="form-cardExpirationMonth" placeholder="MM" />
+                          </div>
+                          <div>
+                            <Label htmlFor="form-cardExpirationYear">Ano</Label>
+                            <Input id="form-cardExpirationYear" placeholder="YY" />
+                          </div>
+                          <div>
+                            <Label htmlFor="form-securityCode">CVV</Label>
+                            <Input id="form-securityCode" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label htmlFor="form-installments">Parcelas (até 12x com juros)</Label>
+                            <Input id="form-installments" defaultValue="1" />
+                          </div>
+                          <div>
+                            <Label htmlFor="form-identificationNumber">CPF/CNPJ do titular</Label>
+                            <Input id="form-identificationNumber" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label htmlFor="form-identificationType">Tipo doc</Label>
+                            <Input id="form-identificationType" placeholder="CPF/CNPJ" />
+                          </div>
+                          <div>
+                            <Label htmlFor="form-issuer">Emissor</Label>
+                            <Input id="form-issuer" />
+                          </div>
+                        </div>
+                        {cardFormError && <p className="text-sm text-red-500">{cardFormError}</p>}
+                      </form>
+                    </TabsContent>
+                  </Tabs>
+
+                  {paymentResult && (
+                    <div className="p-4 border rounded-md space-y-2 bg-secondary/40">
+                      <p className="font-medium">Status: {paymentResult.status || 'pendente'}</p>
+                      {paymentResult.qr_code_base64 && (
+                        <div className="space-y-2">
+                          <p className="text-sm">Escaneie o QR para pagar</p>
+                          <img
+                            src={`data:image/png;base64,${paymentResult.qr_code_base64}`}
+                            alt="QR Code Pix"
+                            className="w-48 h-48"
+                          />
+                          {paymentResult.qr_code && (
+                            <div className="flex items-center gap-2">
+                              <Textarea readOnly value={paymentResult.qr_code} />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => navigator.clipboard.writeText(paymentResult.qr_code)}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {paymentResult.ticket_url && (
+                        <div className="space-y-2">
+                          <p className="text-sm">Link para pagamento:</p>
+                          <a className="text-primary underline" href={paymentResult.ticket_url} target="_blank" rel="noreferrer">
+                            Abrir link
+                          </a>
+                        </div>
+                      )}
+                      <Button variant="outline" onClick={() => orderId && navigate('/pedido/' + orderId)}>
+                        Ver pedido
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
-            
-            {/* Navigation buttons */}
+
             <div className="flex gap-4 mt-6">
               {step > 1 && (
                 <Button variant="outline" onClick={() => setStep(step - 1)}>
@@ -517,14 +758,13 @@ const Checkout = () => {
               )}
               
               {step === 3 && (
-                <Button onClick={handleCreateOrder} disabled={isLoading} className="bg-[#009ee3] hover:bg-[#007eb5]">
-                  Pagar com Mercado Pago
+                <Button onClick={handleCreateOrder} disabled={isLoading || isPaying} className="bg-[#009ee3] hover:bg-[#007eb5]">
+                  {isPaying ? 'Processando...' : 'Pagar agora'}
                 </Button>
               )}
             </div>
           </div>
-          
-          {/* Order summary */}
+
           <div>
             <Card className="sticky top-24">
               <CardHeader>
