@@ -14,10 +14,27 @@ serve(async (req) => {
 
   try {
     // Mercado Pago sends notifications via GET or POST
-    // We need to check the topic parameter to know what type of notification it is
+    // Prefer payload (POST) if available; fallback to query params
     const url = new URL(req.url);
-    const topic = url.searchParams.get('topic') || url.searchParams.get('type');
-    const resourceId = url.searchParams.get('id');
+    let topic = url.searchParams.get('topic') || url.searchParams.get('type');
+    let resourceId = url.searchParams.get('id');
+
+    let body: any = null;
+    if (req.method === 'POST') {
+      try {
+        body = await req.json();
+        // Examples:
+        // { action: 'payment.updated', data: { id: '123' }, type: 'payment' }
+        if (!topic && body?.type) topic = body.type;
+        if (!resourceId && body?.data?.id) resourceId = body.data.id;
+        if (!topic && body?.action) {
+          if (body.action.startsWith('payment')) topic = 'payment';
+          if (body.action.startsWith('merchant_order')) topic = 'merchant_order';
+        }
+      } catch {
+        // ignore body parse errors
+      }
+    }
 
     console.log('Webhook received - Topic:', topic, 'Resource ID:', resourceId);
 
@@ -96,6 +113,10 @@ serve(async (req) => {
           const lastPayment = paymentData.payments[paymentData.payments.length - 1];
           status = lastPayment.status;
         }
+      } else if (paymentData.external_reference) {
+        // fallback if topic not set but we have external_reference
+        externalReference = paymentData.external_reference;
+        status = paymentData.status || null;
       }
 
       if (!externalReference) {
