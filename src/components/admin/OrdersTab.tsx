@@ -68,21 +68,6 @@ export const OrdersTab = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Sender info for labels (store info)
-  const [senderInfo] = useState({
-    name: "Miranda Costa",
-    phone: "11999999999",
-    email: "contato@mirandacosta.com.br",
-    document: "00000000000000",
-    address: "Rua Exemplo",
-    number: "123",
-    complement: "",
-    district: "Centro",
-    city: "São Paulo",
-    state_abbr: "SP",
-    postal_code: "01001000",
-  });
-
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['admin-orders'],
     queryFn: async () => {
@@ -265,7 +250,7 @@ export const OrdersTab = () => {
                       <Eye className="h-4 w-4 mr-1" />
                       Detalhes
                     </Button>
-                    {order.payment_status === 'approved' && !order.tracking_code && (
+                    {(['approved', 'paid'].includes(order.payment_status)) && !order.tracking_code && (
                       <Button size="sm" onClick={() => openLabelDialog(order)}>
                         <Printer className="h-4 w-4 mr-1" />
                         Etiqueta
