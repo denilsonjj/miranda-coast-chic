@@ -355,6 +355,7 @@ const Checkout = () => {
           return;
         }
         const cardData = cardFormRef.current.getCardFormData();
+        console.log('Card data:', cardData);
         token = cardData.token;
         paymentMethodId = cardData.paymentMethodId;
         installments = Number(cardData.installments) || 1;
@@ -706,15 +707,23 @@ const Checkout = () => {
                       </div>
                       <div className="opacity-0 h-0 overflow-hidden">
                         {/* Hidden to keep SDK happy; email/document já coletados acima */}
-                        <Input id="form-cardholderEmail" defaultValue={payerEmail} />
+                        <Input id="form-cardholderEmail" value={payerEmail} readOnly />
                       </div>
                     </div>
 
                     {/* Hidden helpers required by MP form */}
                     <div className="hidden">
-                      <Input id="form-identificationNumber" defaultValue={payerDocument} />
-                      <select id="form-identificationType" defaultValue={payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} />
-                      <select id="form-issuer" />
+                      <Input id="form-identificationNumber" value={payerDocument} readOnly />
+                      <select
+                        id="form-identificationType"
+                        defaultValue={payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'}
+                      >
+                        <option value="CPF">CPF</option>
+                        <option value="CNPJ">CNPJ</option>
+                      </select>
+                      <select id="form-issuer">
+                        <option value="">Selecionar</option>
+                      </select>
                     </div>
 
                       {cardFormError && <p className="text-sm text-red-500">{cardFormError}</p>}
