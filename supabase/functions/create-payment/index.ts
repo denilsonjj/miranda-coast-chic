@@ -39,6 +39,12 @@ serve(async (req) => {
       shipping_cost,
     } = body;
 
+    // Nome do pagador dividido em primeiro e último nome para MP (ex.: boleto requer)
+    const payerName: string = payer?.name || "Cliente";
+    const nameParts = payerName.trim().split(" ");
+    const firstName = payer?.first_name || nameParts.shift() || payerName;
+    const lastName = payer?.last_name || nameParts.join(" ") || payerName;
+
     // Inclui frete (quando houver) no cálculo e envio ao MP
     const shippingAmount = Number(shipping_cost) > 0 ? Number(shipping_cost) : 0;
     const itemsWithShipping = [
@@ -55,6 +61,47 @@ serve(async (req) => {
     ];
 
     const isPreferenceFlow = !payment_method_id;
+
+    // Detecta método de pagamento
+    const isBoleto = payment_method_id?.toLowerCase?.().includes("bol");
+    const isCard = !!payment_method_id && !isBoleto && payment_method_id?.toLowerCase?.() !== "pix";
+
+    // Endereço do pagador (obrigatório para boleto)
+    const payerAddress = payer?.address || {};
+    const boletoAddress =
+      payerAddress && {
+        zip_code: (payerAddress.zip_code || payerAddress.postal_code || "").toString().replace(/\D/g, ""),
+        street_name: payerAddress.street_name || payerAddress.street || "",
+        street_number: (payerAddress.street_number || payerAddress.number || "").toString(),
+        neighborhood: payerAddress.neighborhood || "",
+        city: payerAddress.city || "",
+        federal_unit: payerAddress.federal_unit || payerAddress.state || "",
+      };
+
+    // Validação mínima para cartão: token obrigatório
+    if (isCard && !token) {
+      return new Response(
+        JSON.stringify({ error: "Cartão: token não recebido do frontend. Gere o token antes de pagar." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      );
+    }
+
+    // Validação mínima para boleto: endereço obrigatório
+    if (
+      isBoleto &&
+      (!boletoAddress ||
+        !boletoAddress.zip_code ||
+        !boletoAddress.street_name ||
+        !boletoAddress.city ||
+        !boletoAddress.federal_unit)
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: "Boleto: endereço do pagador incompleto. Envie zip_code, street_name, street_number, city, federal_unit.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      );
+    }
 
     if (
       !itemsWithShipping ||
@@ -120,7 +167,7 @@ serve(async (req) => {
         })),
         payer: {
           email: payer.email || "",
-          name: payer.name || "Cliente",
+          name: payerName || "Cliente",
         },
         back_urls: {
           success: back_urls?.success?.trim() || `${baseUrl}/pedido/${external_reference}`,
@@ -184,11 +231,17 @@ serve(async (req) => {
         payment_method_id,
         payer: {
           email: payer.email || "",
-          first_name: payer.name || "Cliente",
+          first_name: firstName,
+          last_name: lastName,
           identification: {
             type: payer.document_type || "CPF",
             number: payer.document || "",
           },
+          ...(isBoleto && boletoAddress
+            ? {
+                address: boletoAddress,
+              }
+            : {}),
         },
         external_reference,
         statement_descriptor: payer.statement_descriptor || "MIRANDA COAST",

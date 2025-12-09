@@ -88,6 +88,8 @@ const Checkout = () => {
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [payerName, setPayerName] = useState(user?.user_metadata?.full_name || '');
+  const [payerFirstName, setPayerFirstName] = useState('');
+  const [payerLastName, setPayerLastName] = useState('');
   const [payerEmail, setPayerEmail] = useState(user?.email || '');
   const [payerDocument, setPayerDocument] = useState('');
   const [paymentResult, setPaymentResult] = useState<any>(null);
@@ -103,6 +105,11 @@ const Checkout = () => {
     if (!authLoading && !user) {
       navigate('/auth');
     }
+    const full = user?.user_metadata?.full_name || '';
+    const parts = full.trim().split(' ');
+    setPayerFirstName(parts.shift() || '');
+    setPayerLastName(parts.join(' ') || '');
+    setPayerName(full);
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
@@ -266,8 +273,8 @@ const Checkout = () => {
       toast.error('Selecione uma opção de frete');
       return;
     }
-    if (!payerName || !payerEmail || !payerDocument) {
-      toast.error('Informe nome, e-mail e CPF/CNPJ para pagar');
+    if (!payerFirstName || !payerLastName || !payerEmail || !payerDocument) {
+      toast.error('Informe nome, sobrenome, e-mail e CPF/CNPJ para pagar');
       return;
     }
     if (paymentMethod === 'card' && !MERCADO_PAGO_PUBLIC_KEY) {
@@ -291,9 +298,20 @@ const Checkout = () => {
           total: orderTotal,
           shipping_address: {
             ...address,
-            name: payerName || user?.email || 'Cliente',
+            name: `${payerFirstName} ${payerLastName}`.trim() || user?.email || 'Cliente',
+            first_name: payerFirstName,
+            last_name: payerLastName,
             email: payerEmail,
             document: address.document.replace(/\D/g, ''),
+            document_type: payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF',
+            address: {
+              zip_code: address.cep.replace(/\D/g, ''),
+              street_name: address.street,
+              street_number: address.number,
+              neighborhood: address.neighborhood,
+              city: address.city,
+              federal_unit: address.state,
+            },
           } as any,
           shipping_service: selectedShipping as any,
           status: 'pending',
@@ -383,10 +401,20 @@ const Checkout = () => {
           })),
             payer: {
               email: payerEmail,
-              name: payerName,
+              name: `${payerFirstName} ${payerLastName}`.trim(),
+              first_name: payerFirstName,
+              last_name: payerLastName,
               document: payerDocument.replace(/\D/g, ''),
               document_type: identificationType,
               statement_descriptor: 'Miranda Coast',
+              address: {
+                zip_code: address.cep.replace(/\D/g, ''),
+                street_name: address.street,
+                street_number: address.number,
+                neighborhood: address.neighborhood,
+                city: address.city,
+                federal_unit: address.state,
+              },
             },
             shipping_cost: selectedShipping.price || 0,
             back_urls: {
@@ -633,7 +661,11 @@ const Checkout = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Nome *</Label>
-                      <Input value={payerName} onChange={(e) => setPayerName(e.target.value)} />
+                      <Input value={payerFirstName} onChange={(e) => setPayerFirstName(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Sobrenome *</Label>
+                      <Input value={payerLastName} onChange={(e) => setPayerLastName(e.target.value)} />
                     </div>
                     <div>
                       <Label>Email *</Label>
