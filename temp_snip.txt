@@ -1,0 +1,18 @@
+                          <Label htmlFor="form-securityCode">CVV</Label>
+                          <Input id="form-securityCode" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label htmlFor="form-installments">Parcelas (até 12x com juros)</Label>
+                          <Input id="form-installments" defaultValue="1" />
+                        </div>
+                        <div className="opacity-0 h-0 overflow-hidden">
+                          {/* Hidden to keep SDK happy; email/document já coletados acima */}
+                          <Input id="form-cardholderEmail" defaultValue={payerEmail} />
+                        </div>
+                      </div>
+
+                      {/* Hidden helpers required by MP form */}
+                      <div className="hidden">

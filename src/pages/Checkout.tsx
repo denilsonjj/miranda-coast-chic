@@ -678,38 +678,44 @@ const Checkout = () => {
                         <Input id="form-cardNumber" />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <Label htmlFor="form-cardExpirationMonth">Mês</Label>
-                          <Input id="form-cardExpirationMonth" placeholder="MM" />
-                        </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label htmlFor="form-cardExpirationMonth">Mês</Label>
+                        <Input id="form-cardExpirationMonth" placeholder="MM" />
+                      </div>
                         <div>
                           <Label htmlFor="form-cardExpirationYear">Ano</Label>
                           <Input id="form-cardExpirationYear" placeholder="YY" />
                         </div>
                         <div>
-                          <Label htmlFor="form-securityCode">CVV</Label>
-                          <Input id="form-securityCode" />
-                        </div>
+                        <Label htmlFor="form-securityCode">CVV</Label>
+                        <Input id="form-securityCode" />
                       </div>
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label htmlFor="form-installments">Parcelas (até 12x com juros)</Label>
-                          <Input id="form-installments" defaultValue="1" />
-                        </div>
-                        <div className="opacity-0 h-0 overflow-hidden">
-                          {/* Hidden to keep SDK happy; email/document já coletados acima */}
-                          <Input id="form-cardholderEmail" defaultValue={payerEmail} />
-                        </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="form-installments">Parcelas (até 12x com juros)</Label>
+                        <select
+                          id="form-installments"
+                          defaultValue=""
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          <option value="" disabled>Selecione</option>
+                        </select>
                       </div>
+                      <div className="opacity-0 h-0 overflow-hidden">
+                        {/* Hidden to keep SDK happy; email/document já coletados acima */}
+                        <Input id="form-cardholderEmail" defaultValue={payerEmail} />
+                      </div>
+                    </div>
 
-                      {/* Hidden helpers required by MP form */}
-                      <div className="hidden">
-                        <Input id="form-identificationNumber" defaultValue={payerDocument} />
-                        <Input id="form-identificationType" defaultValue={payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} />
-                        <Input id="form-issuer" />
-                      </div>
+                    {/* Hidden helpers required by MP form */}
+                    <div className="hidden">
+                      <Input id="form-identificationNumber" defaultValue={payerDocument} />
+                      <select id="form-identificationType" defaultValue={payerDocument.replace(/\D/g, '').length > 11 ? 'CNPJ' : 'CPF'} />
+                      <select id="form-issuer" />
+                    </div>
 
                       {cardFormError && <p className="text-sm text-red-500">{cardFormError}</p>}
                     </form>
