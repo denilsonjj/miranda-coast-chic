@@ -699,175 +699,195 @@ const Checkout = () => {
             )}
 
             {step === 3 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-serif">Pagamento</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label>Nome *</Label>
-                      <Input value={payerFirstName} onChange={(e) => setPayerFirstName(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Sobrenome *</Label>
-                      <Input value={payerLastName} onChange={(e) => setPayerLastName(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>Email *</Label>
-                      <Input value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} />
-                    </div>
-                    <div>
-                      <Label>CPF/CNPJ *</Label>
-                      <Input
-                        value={payerDocument}
-                        onChange={(e) => setPayerDocument(e.target.value.replace(/\D/g, ""))}
-                        placeholder="Apenas números"
-                      />
-                    </div>
-                  </div>
+  <Card>
+    <CardHeader>
+      <CardTitle className="font-serif">Pagamento</CardTitle>
+    </CardHeader>
 
-                  <Tabs
-                    value={paymentMethod}
-                    onValueChange={(v: string) => {
-                      setPaymentMethod(v as PaymentMethod);
-                      setPaymentResult(null);
-                    }}
-                  >
-                    <TabsList className="grid grid-cols-3">
-                      <TabsTrigger value="pix">Pix</TabsTrigger>
-                      <TabsTrigger value="card">Cartão</TabsTrigger>
-                      <TabsTrigger value="boleto">Boleto</TabsTrigger>
-                    </TabsList>
+    <CardContent className="space-y-6">
 
-                    <TabsContent value="pix" className="space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        Geraremos um QR Code Pix para pagamento imediato.
-                      </p>
-                    </TabsContent>
+      {/* Dados do pagador */}
+      <div className="space-y-4">
+        <h3 className="font-medium text-lg">Seus dados</h3>
 
-                    <TabsContent value="boleto" className="space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        Geraremos um boleto. O pedido ficará pendente até o pagamento ser compensado.
-                      </p>
-                    </TabsContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label>Nome *</Label>
+            <Input value={payerFirstName} onChange={(e) => setPayerFirstName(e.target.value)} />
+          </div>
 
-                    <TabsContent value="card" className="space-y-4">
-                      {!MERCADO_PAGO_PUBLIC_KEY && (
-                        <p className="text-sm text-red-500">
-                          Defina VITE_MERCADO_PAGO_PUBLIC_KEY para habilitar cartão.
-                        </p>
-                      )}
-                      <form id="payment-form" className="space-y-3">
-                        <div>
-                          <Label htmlFor="form-cardholderName">Nome no cartão</Label>
-                          <Input id="form-cardholderName" />
-                        </div>
+          <div>
+            <Label>Sobrenome *</Label>
+            <Input value={payerLastName} onChange={(e) => setPayerLastName(e.target.value)} />
+          </div>
 
-                        <div>
-                          <Label htmlFor="form-cardNumber">Número do cartão</Label>
-                          <Input id="form-cardNumber" />
-                        </div>
+          <div>
+            <Label>Email *</Label>
+            <Input value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} />
+          </div>
 
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <Label htmlFor="form-cardExpirationMonth">Mês</Label>
-                            <Input id="form-cardExpirationMonth" placeholder="MM" />
-                          </div>
-                          <div>
-                            <Label htmlFor="form-cardExpirationYear">Ano</Label>
-                            <Input id="form-cardExpirationYear" placeholder="YY" />
-                          </div>
-                          <div>
-                            <Label htmlFor="form-securityCode">CVV</Label>
-                            <Input id="form-securityCode" />
-                          </div>
-                        </div>
+          <div>
+            <Label>CPF/CNPJ *</Label>
+            <Input
+              value={payerDocument}
+              onChange={(e) => setPayerDocument(e.target.value.replace(/\D/g, ""))}
+              placeholder="Apenas números"
+            />
+          </div>
+        </div>
+      </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="form-installments">Parcelas (até 12x com juros)</Label>
-                            <select
-                              id="form-installments"
-                              defaultValue=""
-                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            >
-                              <option value="" disabled>
-                                Selecione
-                              </option>
-                            </select>
-                          </div>
-                          <div className="opacity-0 h-0 overflow-hidden">
-                            <Input id="form-cardholderEmail" value={payerEmail} readOnly />
-                          </div>
-                        </div>
+      {/* Forma de pagamento */}
+      <div className="space-y-4">
+        <h3 className="font-medium text-lg">Escolha a forma de pagamento</h3>
 
-                        <div className="hidden">
-                          <Input id="form-identificationNumber" value={payerDocument} readOnly />
-                          <select
-                            id="form-identificationType"
-                            defaultValue={payerDocument.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF"}
-                          >
-                            <option value="CPF">CPF</option>
-                            <option value="CNPJ">CNPJ</option>
-                          </select>
-                          <select id="form-issuer">
-                            <option value="">Selecionar</option>
-                          </select>
-                        </div>
+        <Tabs
+          value={paymentMethod}
+          onValueChange={(v: string) => {
+            setPaymentMethod(v as PaymentMethod);
+            setPaymentResult(null);
+          }}
+        >
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="pix">Pix</TabsTrigger>
+            <TabsTrigger value="card">Cartão</TabsTrigger>
+            {/* boleto oculto no front */}
+          </TabsList>
 
-                        {cardFormError && <p className="text-sm text-red-500">{cardFormError}</p>}
-                      </form>
-                    </TabsContent>
-                  </Tabs>
+          {/* PIX */}
+          <TabsContent value="pix" className="space-y-3 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Pagamento instantâneo. Após confirmar, você receberá um QR Code.
+            </p>
+          </TabsContent>
 
-                  {paymentResult && (
-                    <div className="p-4 border rounded-md space-y-2 bg-secondary/40">
-                      <p className="font-medium">Status: {paymentResult.status || "pendente"}</p>
-                      {paymentResult.qr_code_base64 && (
-                        <div className="space-y-2">
-                          <p className="text-sm">Escaneie o QR para pagar</p>
-                          <img
-                            src={`data:image/png;base64,${paymentResult.qr_code_base64}`}
-                            alt="QR Code Pix"
-                            className="w-48 h-48"
-                          />
-                          {paymentResult.qr_code && (
-                            <div className="flex items-center gap-2">
-                              <Textarea readOnly value={paymentResult.qr_code} />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => navigator.clipboard.writeText(paymentResult.qr_code)}
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {paymentResult.ticket_url && (
-                        <div className="space-y-2">
-                          <p className="text-sm">Link para pagamento:</p>
-                          <a
-                            className="text-primary underline"
-                            href={paymentResult.ticket_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Abrir link
-                          </a>
-                        </div>
-                      )}
-                      <Button variant="outline" onClick={() => orderId && navigate("/pedido/" + orderId)}>
-                        Ver pedido
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          {/* CARTÃO */}
+          <TabsContent value="card" className="space-y-4 pt-4">
+            {!MERCADO_PAGO_PUBLIC_KEY && (
+              <p className="text-sm text-red-500">
+                Chave pública do Mercado Pago não configurada.
+              </p>
             )}
+
+            <form id="payment-form" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="form-cardholderName">Nome impresso no cartão</Label>
+                  <Input id="form-cardholderName" placeholder="Ex: JOÃO SILVA" />
+                </div>
+
+                <div>
+                  <Label htmlFor="form-cardNumber">Número do cartão</Label>
+                  <Input id="form-cardNumber" placeholder="0000 0000 0000 0000" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="form-cardExpirationMonth">Mês</Label>
+                  <Input id="form-cardExpirationMonth" placeholder="MM" />
+                </div>
+                <div>
+                  <Label htmlFor="form-cardExpirationYear">Ano</Label>
+                  <Input id="form-cardExpirationYear" placeholder="YY" />
+                </div>
+                <div>
+                  <Label htmlFor="form-securityCode">CVV</Label>
+                  <Input id="form-securityCode" placeholder="3 dígitos" />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="form-installments">Parcelas</Label>
+                <select
+                  id="form-installments"
+                  defaultValue=""
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
+                >
+                  <option value="" disabled>
+                    Selecione
+                  </option>
+                </select>
+              </div>
+
+              {/* Campos obrigatórios para o SDK, mas escondidos */}
+              <div className="hidden">
+                <Input id="form-cardholderEmail" value={payerEmail} readOnly />
+
+                <Input id="form-identificationNumber" value={payerDocument} readOnly />
+
+                <select
+                  id="form-identificationType"
+                  defaultValue={payerDocument.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF"}
+                >
+                  <option value="CPF">CPF</option>
+                  <option value="CNPJ">CNPJ</option>
+                </select>
+
+                <select id="form-issuer">
+                  <option value="">Selecionar</option>
+                </select>
+              </div>
+
+              {cardFormError && (
+                <p className="text-sm text-red-500">{cardFormError}</p>
+              )}
+            </form>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Resultado do pagamento (Pix / etc.) */}
+      {paymentResult && (
+        <div className="p-4 border rounded-md space-y-2 bg-secondary/40">
+          <p className="font-medium">Status: {paymentResult.status || "pendente"}</p>
+
+          {paymentResult.qr_code_base64 && (
+            <div className="space-y-2">
+              <p className="text-sm">Escaneie o QR para pagar</p>
+              <img
+                src={`data:image/png;base64,${paymentResult.qr_code_base64}`}
+                alt="QR Code Pix"
+                className="w-48 h-48"
+              />
+              {paymentResult.qr_code && (
+                <div className="flex items-center gap-2">
+                  <Textarea readOnly value={paymentResult.qr_code} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => navigator.clipboard.writeText(paymentResult.qr_code)}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {paymentResult.ticket_url && (
+            <div className="space-y-2">
+              <p className="text-sm">Link para pagamento:</p>
+              <a
+                className="text-primary underline"
+                href={paymentResult.ticket_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir link
+              </a>
+            </div>
+          )}
+
+          <Button variant="outline" onClick={() => orderId && navigate("/pedido/" + orderId)}>
+            Ver pedido
+          </Button>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+)}
 
             <div className="flex gap-4 mt-6">
               {step > 1 && (
