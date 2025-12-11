@@ -7,7 +7,13 @@ const Sobre = () => {
       <div className="container mx-auto px-4 py-12">
         {/* Header */}
         <div className="text-center mb-16">
-          <h1 className="text-4xl md:text-6xl font-serif mb-6">Sobre a Miranda Costa</h1>
+          <h1
+            className="notranslate text-4xl md:text-6xl font-serif mb-6"
+            data-no-translate
+            translate="no"
+          >
+            Sobre a Miranda Coast
+          </h1>
           <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
             Uma marca que nasceu do amor pela moda feminina e pela liberdade que o litoral
             representa
@@ -20,9 +26,8 @@ const Sobre = () => {
             <h2 className="text-3xl font-serif mb-6 text-center">Nossa História</h2>
             <div className="space-y-4 text-muted-foreground">
               <p>
-                A Miranda Costa nasceu da paixão por criar peças que celebram a feminilidade em
-                sua forma mais autêntica. Inspirada pela leveza e liberdade das regiões
-                costeiras, nossa marca traz um visual suave, delicado e acolhedor.
+              A <span className="notranslate" data-no-translate translate="no">Miranda Coast</span> é a expressão da mulher que entende o seu poder.
+Inspirada pela atitude, poder e o glamour que transcende o tempo, nossa marca traz um visual marcante, que valoriza a silhueta e garante uma presença inesquecível, seja qual for a estação. Peças atemporais com um toque de ousadia.
               </p>
               <p>
                 Cada peça é cuidadosamente selecionada para oferecer conforto, versatilidade e

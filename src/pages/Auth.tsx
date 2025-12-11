@@ -88,7 +88,13 @@ const Auth = () => {
       <div className="container max-w-md px-4">
         <Card className="shadow-large border-none">
           <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-serif">Miranda Costa</CardTitle>
+            <CardTitle
+              className="notranslate text-3xl font-serif"
+              data-no-translate
+              translate="no"
+            >
+              Miranda Coast
+            </CardTitle>
             <CardDescription>Entre ou crie sua conta para continuar</CardDescription>
           </CardHeader>
           <CardContent>

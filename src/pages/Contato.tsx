@@ -73,7 +73,7 @@ const Contato = () => {
                   <Mail className="h-6 w-6 text-primary mt-1" />
                   <div>
                     <h3 className="text-xl font-serif mb-2">E-mail</h3>
-                    <p className="text-muted-foreground">contato@mirandacosta.com</p>
+                    <p className="text-muted-foreground" translate="no">mirandacoastr@gmail.com</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       Respondemos em até 24 horas
                     </p>
@@ -88,7 +88,7 @@ const Contato = () => {
                   <Instagram className="h-6 w-6 text-primary mt-1" />
                   <div>
                     <h3 className="text-xl font-serif mb-2">Instagram</h3>
-                    <p className="text-muted-foreground">@mirandacosta</p>
+                    <p className="text-muted-foreground" translate="no">@miranda_coast</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       Siga-nos para novidades e promoções
                     </p>

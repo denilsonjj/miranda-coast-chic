@@ -60,12 +60,23 @@ const Navbar = () => {
           </div>
 
           {/* Logo - Centered on mobile */}
-          <Link to="/" className="flex items-center gap-2 md:flex-none absolute left-1/2 transform -translate-x-1/2 md:static md:transform-none">
-            <Waves className="h-7 w-7 text-primary" />
-            <span className="text-xl md:text-3xl font-serif font-light tracking-wide text-primary whitespace-nowrap">
-              Miranda Coast
-            </span>
-          </Link>
+         <Link
+  to="/"
+  className="notranslate flex items-center gap-2 md:flex-none absolute left-1/2 transform -translate-x-1/2 md:static md:transform-none"
+  data-no-translate
+  translate="no"
+  aria-label="Miranda Coast"
+>
+  <Waves className="h-7 w-7 text-primary" />
+  <span
+    className="notranslate text-xl md:text-3xl font-serif font-light tracking-wide text-primary whitespace-nowrap"
+    data-no-translate
+    translate="no"
+  >
+    Miranda Coast
+  </span>
+</Link>
+
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">

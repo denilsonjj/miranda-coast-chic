@@ -8,7 +8,13 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="space-y-4">
-            <h3 className="text-2xl font-serif text-primary">Miranda Costa</h3>
+            <h3
+              className="notranslate text-2xl font-serif text-primary"
+              data-no-translate
+              translate="no"
+            >
+              Miranda Coast
+            </h3>
             <p className="text-sm text-muted-foreground">
               Moda feminina delicada, moderna e elegante, inspirada pela liberdade do litoral.
             </p>
@@ -63,7 +69,7 @@ const Footer = () => {
             <h4 className="font-medium mb-4">Redes Sociais</h4>
             <div className="flex space-x-4">
               <a
-                href="#"
+                href="https://www.instagram.com/miranda_coast/"
                 className="text-muted-foreground hover:text-primary transition-smooth"
                 aria-label="Instagram"
               >
