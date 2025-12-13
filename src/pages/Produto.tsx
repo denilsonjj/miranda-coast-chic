@@ -38,7 +38,7 @@ const ProductDetails = () => {
       
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select('*, product_variants (id, color, size, stock)')
         .eq('id', id)
         .single();
       
@@ -47,6 +47,31 @@ const ProductDetails = () => {
     },
     enabled: !!id,
   });
+
+  const variants = Array.isArray(product?.product_variants) ? product.product_variants : [];
+  const hasVariants = variants.length > 0;
+  const selectedVariant = hasVariants && selectedSize && selectedColor
+    ? variants.find(
+        (v) =>
+          (v.size ?? '') === selectedSize &&
+          (v.color ?? '') === selectedColor
+      )
+    : null;
+
+  const availableStock = hasVariants
+    ? selectedVariant
+      ? typeof selectedVariant.stock === 'number'
+        ? selectedVariant.stock
+        : 0
+      : 0
+    : typeof product?.stock === 'number'
+    ? product.stock
+    : 0;
+
+  const isOutOfStock = hasVariants
+    ? !!selectedVariant && availableStock <= 0
+    : availableStock <= 0;
+  const lowStock = availableStock > 0 && availableStock <= 5;
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -74,16 +99,32 @@ const ProductDetails = () => {
       return;
     }
 
-    const availableStock = typeof product.stock === 'number' ? product.stock : 0;
-    if (availableStock <= 0) {
-      toast.error('Este produto está esgotado no momento.');
-      return;
-    }
-
-    if (quantity > availableStock) {
-      toast.error(`Só temos ${availableStock} unidade(s) disponíveis.`);
-      setQuantity(availableStock);
-      return;
+    if (hasVariants) {
+      if (!selectedVariant) {
+        toast.error('Selecione cor e tamanho para continuar.');
+        return;
+      }
+      const variantStock = typeof selectedVariant.stock === 'number' ? selectedVariant.stock : 0;
+      if (variantStock <= 0) {
+        toast.error('Esta combinação está esgotada no momento.');
+        return;
+      }
+      if (quantity > variantStock) {
+        toast.error(`Só temos ${variantStock} unidade(s) disponíveis para esta combinação.`);
+        setQuantity(variantStock);
+        return;
+      }
+    } else {
+      const fallbackStock = typeof product.stock === 'number' ? product.stock : 0;
+      if (fallbackStock <= 0) {
+        toast.error('Este produto está esgotado no momento.');
+        return;
+      }
+      if (quantity > fallbackStock) {
+        toast.error(`Só temos ${fallbackStock} unidade(s) disponíveis.`);
+        setQuantity(fallbackStock);
+        return;
+      }
     }
 
     setIsAddingToCart(true);
@@ -132,10 +173,6 @@ const ProductDetails = () => {
   const discountPercentage = hasDiscount
     ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
     : 0;
-
-  const availableStock = typeof product.stock === 'number' ? product.stock : 0;
-  const isOutOfStock = availableStock <= 0;
-  const lowStock = availableStock > 0 && availableStock <= 5;
 
   return (
     <div className="min-h-screen pt-24 pb-12">
@@ -270,7 +307,7 @@ const ProductDetails = () => {
                 <button
                   onClick={() => setQuantity((prev) => Math.max(1, Math.min(prev - 1, Math.max(availableStock, 1))))}
                   className="px-4 py-2 hover:bg-muted transition-colors"
-                  disabled={isOutOfStock || quantity <= 1}
+                  disabled={isOutOfStock || quantity <= 1 || (hasVariants && !selectedVariant)}
                 >
                   −
                 </button>
@@ -285,7 +322,7 @@ const ProductDetails = () => {
                     setQuantity(capped);
                   }}
                   className="w-12 text-center border-x py-2 focus:outline-none"
-                  disabled={isOutOfStock}
+                  disabled={isOutOfStock || (hasVariants && !selectedVariant)}
                 />
                 <button
                   onClick={() =>
@@ -294,13 +331,21 @@ const ProductDetails = () => {
                     )
                   }
                   className="px-4 py-2 hover:bg-muted transition-colors"
-                  disabled={isOutOfStock || (availableStock ? quantity >= availableStock : false)}
+                  disabled={
+                    isOutOfStock ||
+                    (hasVariants && !selectedVariant) ||
+                    (availableStock ? quantity >= availableStock : false)
+                  }
                 >
                   +
                 </button>
               </div>
               <div className="space-y-1">
-                {isOutOfStock ? (
+                {hasVariants && !selectedVariant ? (
+                  <p className="text-sm text-muted-foreground">
+                    Selecione cor e tamanho para ver o estoque disponível.
+                  </p>
+                ) : isOutOfStock ? (
                   <p className="text-sm text-red-600">Este produto está esgotado no momento.</p>
                 ) : (
                   <>

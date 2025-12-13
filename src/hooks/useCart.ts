@@ -15,6 +15,12 @@ export interface CartItem {
     price: number;
     images: string[];
     stock?: number;
+    product_variants?: {
+      id?: string;
+      color?: string | null;
+      size?: string | null;
+      stock?: number | null;
+    }[];
   };
 }
 
@@ -40,7 +46,8 @@ export const useCart = () => {
             name,
             price,
             images,
-            stock
+            stock,
+            product_variants (id, color, size, stock)
           )
         `)
         .eq('user_id', user.id);
@@ -49,7 +56,7 @@ export const useCart = () => {
 
       return (data || []).map((item: any) => ({
         ...item,
-        product: item.products || { id: '', name: '', price: 0, images: [], stock: 0 },
+        product: item.products || { id: '', name: '', price: 0, images: [], stock: 0, product_variants: [] },
       })) as CartItem[];
     },
     enabled: !!user,
@@ -67,21 +74,27 @@ export const useCart = () => {
       // Validate required variations and available stock for the product
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('sizes, colors, name, stock, is_active')
+        .select('sizes, colors, name, stock, is_active, product_variants (id, color, size, stock)')
         .eq('id', productId)
         .maybeSingle();
 
       if (productError) throw productError;
       if (!product) throw new Error('Produto não encontrado');
 
-      const availableStock = typeof product.stock === 'number' ? product.stock : 0;
+      const variants = Array.isArray((product as any).product_variants) ? (product as any).product_variants : [];
+      const hasVariants = variants.length > 0;
 
-      if (!product.is_active || availableStock <= 0) {
+      const sizeOptions = Array.isArray(product?.sizes) ? product.sizes : [];
+      const colorOptions = Array.isArray(product?.colors) ? product.colors : [];
+      const variantRequiresSize = hasVariants && variants.some((v: any) => v.size);
+      const variantRequiresColor = hasVariants && variants.some((v: any) => v.color);
+
+      if (!product.is_active) {
         throw new Error(`${product.name || 'Produto'} está esgotado no momento.`);
       }
 
-      const sizeRequired = Array.isArray(product?.sizes) && product.sizes.length > 0;
-      const colorRequired = Array.isArray(product?.colors) && product.colors.length > 0;
+      const sizeRequired = sizeOptions.length > 0 || variantRequiresSize;
+      const colorRequired = colorOptions.length > 0 || variantRequiresColor;
 
       if (sizeRequired && !size) {
         throw new Error(`Selecione um tamanho para ${product?.name || 'o produto'}`);
@@ -93,6 +106,30 @@ export const useCart = () => {
 
       const sizeValue = size || null;
       const colorValue = color || null;
+
+      const variantMatch = hasVariants
+        ? variants.find(
+            (v: any) =>
+              (v.size ?? null) === sizeValue &&
+              (v.color ?? null) === colorValue
+          )
+        : null;
+
+      const availableStock = hasVariants
+        ? typeof variantMatch?.stock === 'number'
+          ? variantMatch.stock
+          : 0
+        : typeof product.stock === 'number'
+        ? product.stock
+        : 0;
+
+      if (hasVariants && !variantMatch) {
+        throw new Error('Selecione uma combinação válida de cor e tamanho.');
+      }
+
+      if (availableStock <= 0) {
+        throw new Error(`${product.name || 'Produto'} está esgotado no momento.`);
+      }
 
       // Check if item already exists with the same variations
       let query = supabase
@@ -145,14 +182,41 @@ export const useCart = () => {
 
       const { data: cartItem, error: cartItemError } = await supabase
         .from('cart_items')
-        .select(`product_id, products (stock, name)`)
+        .select(`product_id, size, color, products (stock, name, product_variants (id, color, size, stock))`)
         .eq('id', itemId)
         .single();
 
       if (cartItemError) throw cartItemError;
 
       const productName = cartItem?.products?.name || 'o produto';
-      const availableStock = typeof cartItem?.products?.stock === 'number' ? cartItem.products.stock : 0;
+      const variants = Array.isArray(cartItem?.products?.product_variants)
+        ? cartItem.products.product_variants
+        : [];
+      const hasVariants = variants.length > 0;
+
+      const variantMatch = hasVariants
+        ? variants.find(
+            (v: any) =>
+              (v.size ?? null) === (cartItem.size ?? null) &&
+              (v.color ?? null) === (cartItem.color ?? null)
+          )
+        : null;
+
+      const availableStock = hasVariants
+        ? typeof variantMatch?.stock === 'number'
+          ? variantMatch.stock
+          : 0
+        : typeof cartItem?.products?.stock === 'number'
+        ? cartItem.products.stock
+        : 0;
+
+      if (hasVariants && !variantMatch) {
+        throw new Error('Combinação de cor/tamanho não encontrada para este item.');
+      }
+
+      if (availableStock <= 0) {
+        throw new Error(`${productName} está esgotado.`);
+      }
 
       if (quantity <= 0) {
         const { error } = await supabase

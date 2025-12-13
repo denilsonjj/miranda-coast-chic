@@ -63,8 +63,27 @@ const CartSheet = ({ children }: CartSheetProps) => {
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-y-auto py-4 space-y-4">
               {cartItems.map((item) => {
-                const availableStock =
-                  typeof item.product.stock === 'number' ? item.product.stock : null;
+                const variants = Array.isArray(item.product.product_variants)
+                  ? item.product.product_variants
+                  : [];
+                const hasVariants = variants.length > 0;
+                const variantMatch = hasVariants
+                  ? variants.find(
+                      (v) =>
+                        (v.size ?? null) === (item.size ?? null) &&
+                        (v.color ?? null) === (item.color ?? null)
+                    )
+                  : null;
+                const variantMissing = hasVariants && !variantMatch;
+
+                const availableStock = hasVariants
+                  ? typeof variantMatch?.stock === 'number'
+                    ? variantMatch.stock
+                    : 0
+                  : typeof item.product.stock === 'number'
+                  ? item.product.stock
+                  : null;
+
                 const outOfStock = availableStock !== null && availableStock <= 0;
                 const atLimit =
                   availableStock !== null && availableStock > 0 && item.quantity >= availableStock;
@@ -125,14 +144,16 @@ const CartSheet = ({ children }: CartSheetProps) => {
                       {availableStock !== null && (
                         <p
                           className={`text-xs mt-1 ${
-                            outOfStock
+                            variantMissing || outOfStock
                               ? 'text-red-600'
                               : atLimit
                               ? 'text-amber-600'
                               : 'text-muted-foreground'
                           }`}
                         >
-                          {outOfStock
+                          {variantMissing
+                            ? 'Combinação de variação não encontrada. Ajuste ou remova.'
+                            : outOfStock
                             ? 'Esgotado no momento. Remova ou ajuste a quantidade.'
                             : atLimit
                             ? `Limite de estoque: ${availableStock} unidade(s).`

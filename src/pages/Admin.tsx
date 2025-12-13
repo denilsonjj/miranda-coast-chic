@@ -55,6 +55,13 @@ const defaultCategories = [
   "Saias",
 ];
 
+type VariantFormRow = {
+  id?: string;
+  color: string;
+  size: string;
+  stock: string;
+};
+
 const Admin = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -106,12 +113,14 @@ const Admin = () => {
     is_active: true,
   });
 
+  const [variantRows, setVariantRows] = useState<VariantFormRow[]>([]);
+
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["admin-products"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("*")
+        .select("*, product_variants (id, color, size, stock)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -199,8 +208,42 @@ const Admin = () => {
     }
   }, [heroSettings]);
 
+  const variantTotal = variantRows.reduce(
+    (sum, v) => sum + (parseInt(v.stock) || 0),
+    0
+  );
+
   const saveProduct = useMutation({
     mutationFn: async (product: any) => {
+      const cleanedVariants = variantRows
+        .map((v) => ({
+          id: v.id,
+          color: v.color.trim(),
+          size: v.size.trim(),
+          stock: parseInt(v.stock) || 0,
+        }))
+        .filter((v) => (v.color || v.size) && v.stock >= 0);
+
+      const hasVariants = cleanedVariants.length > 0;
+
+      const sizesArray = hasVariants
+        ? Array.from(new Set(cleanedVariants.map((v) => v.size).filter(Boolean)))
+        : product.sizes
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+
+      const colorsArray = hasVariants
+        ? Array.from(new Set(cleanedVariants.map((v) => v.color).filter(Boolean)))
+        : product.colors
+            .split(",")
+            .map((c: string) => c.trim())
+            .filter(Boolean);
+
+      const totalStock = hasVariants
+        ? cleanedVariants.reduce((sum, v) => sum + v.stock, 0)
+        : parseInt(product.stock) || 0;
+
       const productData = {
         name: product.name,
         description: product.description,
@@ -209,18 +252,14 @@ const Admin = () => {
         original_price: product.original_price
           ? parseFloat(product.original_price)
           : null,
-        stock: parseInt(product.stock) || 0,
-        sizes: product.sizes
-          .split(",")
-          .map((s: string) => s.trim())
-          .filter(Boolean),
-        colors: product.colors
-          .split(",")
-          .map((c: string) => c.trim())
-          .filter(Boolean),
+        stock: totalStock,
+        sizes: sizesArray,
+        colors: colorsArray,
         images: product.images,
         is_active: product.is_active,
       };
+
+      let productId = editingProduct?.id;
 
       if (editingProduct) {
         const { error } = await supabase
@@ -229,8 +268,25 @@ const Admin = () => {
           .eq("id", editingProduct.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("products").insert(productData);
+        const { data, error } = await supabase.from("products").insert(productData).select("id").single();
         if (error) throw error;
+        productId = data?.id;
+      }
+
+      if (productId) {
+        await supabase.from("product_variants").delete().eq("product_id", productId);
+
+        if (hasVariants) {
+          const payload = cleanedVariants.map((v) => ({
+            id: v.id,
+            product_id: productId,
+            color: v.color || null,
+            size: v.size || null,
+            stock: v.stock,
+          }));
+          const { error: variantsError } = await supabase.from("product_variants").insert(payload);
+          if (variantsError) throw variantsError;
+        }
       }
     },
     onSuccess: () => {
@@ -457,6 +513,7 @@ const Admin = () => {
       is_active: true,
     });
     setEditingProduct(null);
+    setVariantRows([]);
   };
 
   const resetAnnouncementForm = () => {
@@ -495,6 +552,16 @@ const Admin = () => {
       images: product.images || [],
       is_active: product.is_active,
     });
+    setVariantRows(
+      Array.isArray(product.product_variants)
+        ? product.product_variants.map((v: any) => ({
+            id: v.id,
+            color: v.color || "",
+            size: v.size || "",
+            stock: (v.stock ?? 0).toString(),
+          }))
+        : []
+    );
     setProductDialog(true);
   };
 
@@ -744,6 +811,109 @@ const Admin = () => {
                               }))
                             }
                           />
+                        </div>
+                        <div className="col-span-2 space-y-3 border-t pt-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                              <Label>Estoque por variação (opcional)</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Se preencher, o estoque total será a soma das variações e cor/tamanho serão atualizados automaticamente.
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setVariantRows((rows) => [...rows, { color: "", size: "", stock: "" }])
+                                }
+                              >
+                                Adicionar variação
+                              </Button>
+                              {variantRows.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setVariantRows([])}
+                                >
+                                  Limpar
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            {variantRows.length === 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                Nenhuma variação adicionada. O estoque usará o campo geral acima.
+                              </p>
+                            )}
+                            {variantRows.map((variant, idx) => (
+                              <div
+                                key={variant.id || idx}
+                                className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end p-3 border rounded-lg bg-muted/40"
+                              >
+                                <div className="sm:col-span-4">
+                                  <Label className="text-sm">Cor</Label>
+                                  <Input
+                                    value={variant.color}
+                                    placeholder="Ex: Preto"
+                                    onChange={(e) =>
+                                      setVariantRows((rows) =>
+                                        rows.map((row, i) =>
+                                          i === idx ? { ...row, color: e.target.value } : row
+                                        )
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="sm:col-span-4">
+                                  <Label className="text-sm">Tamanho</Label>
+                                  <Input
+                                    value={variant.size}
+                                    placeholder="Ex: G"
+                                    onChange={(e) =>
+                                      setVariantRows((rows) =>
+                                        rows.map((row, i) =>
+                                          i === idx ? { ...row, size: e.target.value } : row
+                                        )
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="sm:col-span-3">
+                                  <Label className="text-sm">Estoque</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={variant.stock}
+                                    onChange={(e) =>
+                                      setVariantRows((rows) =>
+                                        rows.map((row, i) =>
+                                          i === idx ? { ...row, stock: e.target.value } : row
+                                        )
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="sm:col-span-1 flex justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      setVariantRows((rows) => rows.filter((_, i) => i !== idx))
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {variantRows.length > 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                Estoque total calculado pelas variações: {variantTotal} unidade(s).
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <div className="col-span-2 space-y-2">
                           <Label>Imagens do produto</Label>

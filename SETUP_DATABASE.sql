@@ -73,6 +73,21 @@ CREATE TABLE public.products (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
+-- Product Variants (per cor/tamanho)
+DROP TABLE IF EXISTS public.product_variants CASCADE;
+CREATE TABLE public.product_variants (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+  color TEXT,
+  size TEXT,
+  stock INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  UNIQUE (product_id, COALESCE(color, ''), COALESCE(size, ''))
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_variants_product ON public.product_variants(product_id);
+
 -- Cart Items
 DROP TABLE IF EXISTS public.cart_items CASCADE;
 CREATE TABLE public.cart_items (

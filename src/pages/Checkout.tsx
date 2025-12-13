@@ -173,8 +173,6 @@ const Checkout = () => {
 
             try {
               const cardData = cardForm.getCardFormData();
-              console.log("Card data onSubmit:", cardData);
-
               if (!cardData.token) {
                 setCardFormError("Não foi possível tokenizar o cartão. Confira os dados e tente novamente.");
                 return;
@@ -323,7 +321,7 @@ const Checkout = () => {
       const productIds = cartItems.map((item) => item.product_id);
       const { data: productsStock, error: stockError } = await supabase
         .from("products")
-        .select("id, stock, name, is_active")
+        .select("id, stock, name, is_active, product_variants (id, color, size, stock)")
         .in("id", productIds);
 
       if (stockError) {
@@ -335,17 +333,45 @@ const Checkout = () => {
       }
 
       const stockMap = (productsStock || []).reduce((acc: Record<string, any>, product: any) => {
-        acc[product.id] = product;
+        acc[product.id] = {
+          ...product,
+          product_variants: Array.isArray(product.product_variants)
+            ? product.product_variants.map((v: any) => ({ ...v }))
+            : [],
+        };
         return acc;
       }, {});
 
       for (const item of cartItems) {
         const productInfo = stockMap[item.product_id];
         const productName = productInfo?.name || item.product?.name || "Produto";
-        const available = typeof productInfo?.stock === "number" ? productInfo.stock : 0;
+        const variants = Array.isArray(productInfo?.product_variants) ? productInfo.product_variants : [];
+        const hasVariants = variants.length > 0;
+        const variantMatch = hasVariants
+          ? variants.find(
+              (v: any) =>
+                (v.size ?? null) === (item.size ?? null) &&
+                (v.color ?? null) === (item.color ?? null)
+            )
+          : null;
+
+        const available = hasVariants
+          ? typeof variantMatch?.stock === "number"
+            ? variantMatch.stock
+            : 0
+          : typeof productInfo?.stock === "number"
+          ? productInfo.stock
+          : 0;
 
         if (!productInfo || !productInfo.is_active) {
           toast.error(`O produto ${productName} está indisponível.`);
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+
+        if (hasVariants && !variantMatch) {
+          toast.error(`A combinação selecionada para ${productName} não foi encontrada. Refaça a seleção.`);
           setIsLoading(false);
           setIsPaying(false);
           return;
@@ -437,27 +463,90 @@ const Checkout = () => {
         return;
       }
 
+      // Atualiza estoque de variantes e total do produto
       for (const item of cartItems) {
         const productInfo = stockMap[item.product_id];
         if (!productInfo) continue;
 
-        const currentStock = typeof productInfo.stock === "number" ? productInfo.stock : 0;
-        const newStock = Math.max(0, currentStock - item.quantity);
+        const variants = Array.isArray(productInfo.product_variants) ? productInfo.product_variants : [];
+        const hasVariants = variants.length > 0;
 
-        const { error: stockUpdateError } = await supabase
-          .from("products")
-          .update({ stock: newStock })
-          .eq("id", item.product_id);
+        if (hasVariants) {
+          const variantMatch = variants.find(
+            (v: any) =>
+              (v.size ?? null) === (item.size ?? null) &&
+              (v.color ?? null) === (item.color ?? null)
+          );
 
-        if (stockUpdateError) {
-          console.error("Stock update error:", stockUpdateError);
+          if (variantMatch) {
+            const currentVariantStock = typeof variantMatch.stock === "number" ? variantMatch.stock : 0;
+            const newVariantStock = Math.max(0, currentVariantStock - item.quantity);
+            variantMatch.stock = newVariantStock;
+          }
+        } else {
+          const currentStock = typeof productInfo.stock === "number" ? productInfo.stock : 0;
+          const newStock = Math.max(0, currentStock - item.quantity);
+          productInfo.stock = newStock;
+        }
+      }
+
+      const variantUpserts: any[] = [];
+      const productStockUpdates: { id: string; stock: number }[] = [];
+
+      Object.values(stockMap).forEach((productInfo: any) => {
+        const variants = Array.isArray(productInfo.product_variants) ? productInfo.product_variants : [];
+        if (variants.length > 0) {
+          variantUpserts.push(
+            ...variants.map((v: any) => ({
+              id: v.id,
+              product_id: productInfo.id,
+              color: v.color ?? null,
+              size: v.size ?? null,
+              stock: typeof v.stock === "number" ? v.stock : 0,
+            }))
+          );
+          const totalStock = variants.reduce(
+            (sum: number, v: any) => sum + (typeof v.stock === "number" ? v.stock : 0),
+            0
+          );
+          productStockUpdates.push({ id: productInfo.id, stock: totalStock });
+        } else {
+          productStockUpdates.push({
+            id: productInfo.id,
+            stock: typeof productInfo.stock === "number" ? productInfo.stock : 0,
+          });
+        }
+      });
+
+      if (variantUpserts.length > 0) {
+        const { error: variantUpdateError } = await supabase
+          .from("product_variants")
+          .upsert(variantUpserts);
+
+        if (variantUpdateError) {
+          console.error("Variant stock update error:", variantUpdateError);
+          toast.error("Pedido criado, mas houve erro ao atualizar o estoque das variações. Entre em contato.");
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+      }
+
+      if (productStockUpdates.length > 0) {
+        const updates = await Promise.all(
+          productStockUpdates.map((p) =>
+            supabase.from("products").update({ stock: p.stock }).eq("id", p.id)
+          )
+        );
+
+        const stockUpdateError = updates.find((u) => u.error);
+        if (stockUpdateError?.error) {
+          console.error("Stock update error:", stockUpdateError.error);
           toast.error("Pedido criado, mas houve erro ao atualizar o estoque. Entre em contato.");
           setIsLoading(false);
           setIsPaying(false);
           return;
         }
-
-        stockMap[item.product_id] = { ...productInfo, stock: newStock };
       }
 
       let paymentMethodId =
@@ -470,8 +559,6 @@ const Checkout = () => {
       if (paymentMethod === "card") {
         const cardData =
           cardDataFromMP ?? cardFormRef.current?.getCardFormData?.();
-
-        console.log("Card data (handleCreateOrder):", cardData);
 
         if (!cardData) {
           toast.error("Formulário do cartão não iniciado");
@@ -536,8 +623,6 @@ const Checkout = () => {
         },
       });
 
-      console.log("PaymentData (create-payment):", { paymentData, paymentError });
-
       if (paymentError) {
         console.error("Payment error:", paymentError);
         toast.error("Pedido criado, mas houve erro ao iniciar o pagamento. Tente novamente.");
@@ -548,7 +633,7 @@ const Checkout = () => {
       }
 
       if (paymentData?.error) {
-        console.error("Payment creation error:", paymentData);
+        console.error("Payment creation error");
         toast.error(
           paymentData.status_detail
             ? `Pagamento rejeitado: ${paymentData.status_detail}`
