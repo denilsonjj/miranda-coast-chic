@@ -58,6 +58,49 @@ const ProductDetails = () => {
       })
     : null;
 
+  const availableSizes = hasVariants
+    ? Array.from(
+        new Set(
+          variants
+            .filter((v) => {
+              if (selectedColor && v.color) return v.color === selectedColor;
+              return true;
+            })
+            .map((v) => v.size)
+            .filter(Boolean) as string[]
+        )
+      )
+    : Array.isArray(product?.sizes)
+    ? product.sizes
+    : [];
+
+  const availableColors = hasVariants
+    ? Array.from(
+        new Set(
+          variants
+            .filter((v) => {
+              if (selectedSize && v.size) return v.size === selectedSize;
+              return true;
+            })
+            .map((v) => v.color)
+            .filter(Boolean) as string[]
+        )
+      )
+    : Array.isArray(product?.colors)
+    ? product.colors
+    : [];
+
+  useEffect(() => {
+    if (hasVariants) {
+      if (selectedSize && !availableSizes.includes(selectedSize)) {
+        setSelectedSize("");
+      }
+      if (selectedColor && !availableColors.includes(selectedColor)) {
+        setSelectedColor("");
+      }
+    }
+  }, [selectedSize, selectedColor, availableSizes, availableColors, hasVariants]);
+
   const availableStock = hasVariants
     ? selectedVariant
       ? typeof selectedVariant.stock === 'number'
@@ -256,7 +299,7 @@ const ProductDetails = () => {
             </div>
 
             {/* Size Selection */}
-            {product.sizes && product.sizes.length > 0 && (
+            {availableSizes && availableSizes.length > 0 && (
               <div className="space-y-3">
                 <label className="text-sm font-semibold">
                   Tamanho *
@@ -267,7 +310,7 @@ const ProductDetails = () => {
                     <SelectValue placeholder="Selecione um tamanho" />
                   </SelectTrigger>
                   <SelectContent>
-                    {product.sizes.map((size) => (
+                    {availableSizes.map((size) => (
                       <SelectItem key={size} value={size}>
                         {size}
                       </SelectItem>
@@ -281,7 +324,7 @@ const ProductDetails = () => {
             )}
 
             {/* Color Selection */}
-            {product.colors && product.colors.length > 0 && (
+            {availableColors && availableColors.length > 0 && (
               <div className="space-y-3">
                 <label className="text-sm font-semibold">Cor</label>
                 <Select value={selectedColor} onValueChange={setSelectedColor}>
@@ -289,7 +332,7 @@ const ProductDetails = () => {
                     <SelectValue placeholder="Selecione uma cor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {product.colors.map((color) => (
+                    {availableColors.map((color) => (
                       <SelectItem key={color} value={color}>
                         {color}
                       </SelectItem>
