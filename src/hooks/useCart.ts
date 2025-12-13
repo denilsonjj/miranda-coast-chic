@@ -86,8 +86,8 @@ export const useCart = () => {
 
       const sizeOptions = Array.isArray(product?.sizes) ? product.sizes : [];
       const colorOptions = Array.isArray(product?.colors) ? product.colors : [];
-      const variantRequiresSize = hasVariants && variants.some((v: any) => v.size);
-      const variantRequiresColor = hasVariants && variants.some((v: any) => v.color);
+      const variantRequiresSize = hasVariants && variants.some((v: any) => !!v.size);
+      const variantRequiresColor = hasVariants && variants.some((v: any) => !!v.color);
 
       if (!product.is_active) {
         throw new Error(`${product.name || 'Produto'} está esgotado no momento.`);
@@ -108,11 +108,11 @@ export const useCart = () => {
       const colorValue = color || null;
 
       const variantMatch = hasVariants
-        ? variants.find(
-            (v: any) =>
-              (v.size ?? null) === sizeValue &&
-              (v.color ?? null) === colorValue
-          )
+        ? variants.find((v: any) => {
+            const sizeMatch = v.size ? v.size === sizeValue : true;
+            const colorMatch = v.color ? v.color === colorValue : true;
+            return sizeMatch && colorMatch;
+          })
         : null;
 
       const availableStock = hasVariants
@@ -195,11 +195,11 @@ export const useCart = () => {
       const hasVariants = variants.length > 0;
 
       const variantMatch = hasVariants
-        ? variants.find(
-            (v: any) =>
-              (v.size ?? null) === (cartItem.size ?? null) &&
-              (v.color ?? null) === (cartItem.color ?? null)
-          )
+        ? variants.find((v: any) => {
+            const sizeMatch = v.size ? v.size === (cartItem.size ?? null) : true;
+            const colorMatch = v.color ? v.color === (cartItem.color ?? null) : true;
+            return sizeMatch && colorMatch;
+          })
         : null;
 
       const availableStock = hasVariants

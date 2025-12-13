@@ -50,12 +50,12 @@ const ProductDetails = () => {
 
   const variants = Array.isArray(product?.product_variants) ? product.product_variants : [];
   const hasVariants = variants.length > 0;
-  const selectedVariant = hasVariants && selectedSize && selectedColor
-    ? variants.find(
-        (v) =>
-          (v.size ?? '') === selectedSize &&
-          (v.color ?? '') === selectedColor
-      )
+  const selectedVariant = hasVariants
+    ? variants.find((v) => {
+        const sizeMatch = v.size ? v.size === selectedSize : true;
+        const colorMatch = v.color ? v.color === selectedColor : true;
+        return sizeMatch && colorMatch;
+      })
     : null;
 
   const availableStock = hasVariants
@@ -69,7 +69,9 @@ const ProductDetails = () => {
     : 0;
 
   const isOutOfStock = hasVariants
-    ? !!selectedVariant && availableStock <= 0
+    ? selectedVariant
+      ? availableStock <= 0
+      : false
     : availableStock <= 0;
   const lowStock = availableStock > 0 && availableStock <= 5;
 

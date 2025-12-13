@@ -271,18 +271,12 @@ const Admin = () => {
         await supabase.from("product_variants").delete().eq("product_id", productId);
 
         if (hasVariants) {
-          const payload = cleanedVariants.map((v) => {
-            const base: any = {
-              product_id: productId,
-              color: v.color || null,
-              size: v.size || null,
-              stock: v.stock,
-            };
-            if (v.id) {
-              base.id = v.id;
-            }
-            return base;
-          });
+          const payload = cleanedVariants.map((v) => ({
+            product_id: productId,
+            color: v.color || null,
+            size: v.size || null,
+            stock: v.stock,
+          }));
           const { error: variantsError } = await supabase.from("product_variants").insert(payload);
           if (variantsError) throw variantsError;
         }

@@ -348,11 +348,11 @@ const Checkout = () => {
         const variants = Array.isArray(productInfo?.product_variants) ? productInfo.product_variants : [];
         const hasVariants = variants.length > 0;
         const variantMatch = hasVariants
-          ? variants.find(
-              (v: any) =>
-                (v.size ?? null) === (item.size ?? null) &&
-                (v.color ?? null) === (item.color ?? null)
-            )
+          ? variants.find((v: any) => {
+              const sizeMatch = v.size ? v.size === (item.size ?? null) : true;
+              const colorMatch = v.color ? v.color === (item.color ?? null) : true;
+              return sizeMatch && colorMatch;
+            })
           : null;
 
         const available = hasVariants
