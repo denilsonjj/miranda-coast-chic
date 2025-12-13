@@ -228,21 +228,15 @@ const Admin = () => {
 
       const sizesArray = hasVariants
         ? Array.from(new Set(cleanedVariants.map((v) => v.size).filter(Boolean)))
-        : product.sizes
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter(Boolean);
+        : [];
 
       const colorsArray = hasVariants
         ? Array.from(new Set(cleanedVariants.map((v) => v.color).filter(Boolean)))
-        : product.colors
-            .split(",")
-            .map((c: string) => c.trim())
-            .filter(Boolean);
+        : [];
 
       const totalStock = hasVariants
         ? cleanedVariants.reduce((sum, v) => sum + v.stock, 0)
-        : parseInt(product.stock) || 0;
+        : 0;
 
       const productData = {
         name: product.name,
@@ -277,13 +271,18 @@ const Admin = () => {
         await supabase.from("product_variants").delete().eq("product_id", productId);
 
         if (hasVariants) {
-          const payload = cleanedVariants.map((v) => ({
-            id: v.id,
-            product_id: productId,
-            color: v.color || null,
-            size: v.size || null,
-            stock: v.stock,
-          }));
+          const payload = cleanedVariants.map((v) => {
+            const base: any = {
+              product_id: productId,
+              color: v.color || null,
+              size: v.size || null,
+              stock: v.stock,
+            };
+            if (v.id) {
+              base.id = v.id;
+            }
+            return base;
+          });
           const { error: variantsError } = await supabase.from("product_variants").insert(payload);
           if (variantsError) throw variantsError;
         }
@@ -745,19 +744,6 @@ const Admin = () => {
                           </Select>
                         </div>
                         <div>
-                          <Label>Estoque</Label>
-                          <Input
-                            type="number"
-                            value={productForm.stock}
-                            onChange={(e) =>
-                              setProductForm((p) => ({
-                                ...p,
-                                stock: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div>
                           <Label>Preço *</Label>
                           <Input
                             type="number"
@@ -782,32 +768,6 @@ const Admin = () => {
                               setProductForm((p) => ({
                                 ...p,
                                 original_price: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label>Tamanhos (separados por vírgula)</Label>
-                          <Input
-                            placeholder="P, M, G, GG"
-                            value={productForm.sizes}
-                            onChange={(e) =>
-                              setProductForm((p) => ({
-                                ...p,
-                                sizes: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <Label>Cores (separadas por vírgula)</Label>
-                          <Input
-                            placeholder="Azul, Branco, Rosa"
-                            value={productForm.colors}
-                            onChange={(e) =>
-                              setProductForm((p) => ({
-                                ...p,
-                                colors: e.target.value,
                               }))
                             }
                           />
