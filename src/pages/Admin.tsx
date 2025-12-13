@@ -631,7 +631,7 @@ const Admin = () => {
                         {editingProduct ? "Editar Produto" : "Novo Produto"}
                       </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-2 sm:py-4">
+                    <div className="space-y-4 py-2 sm:py-4 pb-24">
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                         <div className="col-span-1 lg:col-span-2 space-y-2">
                           <Label>Nome *</Label>
@@ -791,22 +791,24 @@ const Admin = () => {
                           )}
                         </div>
                       </div>
-                      <Button
-                        className="w-full"
-                        onClick={() => saveProduct.mutate(productForm)}
-                        disabled={
-                          saveProduct.isPending ||
-                          !productForm.name ||
-                          !productForm.price
-                        }
-                      >
-                        {saveProduct.isPending && (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        )}
-                        {editingProduct
-                          ? "Salvar Alterações"
-                          : "Criar Produto"}
-                      </Button>
+                      <div className="sticky bottom-0 left-0 right-0 bg-background/90 backdrop-blur border-t pt-3">
+                        <Button
+                          className="w-full"
+                          onClick={() => saveProduct.mutate(productForm)}
+                          disabled={
+                            saveProduct.isPending ||
+                            !productForm.name ||
+                            !productForm.price
+                          }
+                        >
+                          {saveProduct.isPending && (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          )}
+                          {editingProduct
+                            ? "Salvar Alterações"
+                            : "Criar Produto"}
+                        </Button>
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>

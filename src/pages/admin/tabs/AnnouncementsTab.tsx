@@ -62,11 +62,11 @@ export const AnnouncementsTab = ({
               Novo Anúncio
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle>{editingAnnouncement ? "Editar Anúncio" : "Novo Anúncio"}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 pb-24">
               <div>
                 <Label>Título *</Label>
                 <Input
@@ -117,14 +117,16 @@ export const AnnouncementsTab = ({
                 />
                 <Label>Anúncio ativo</Label>
               </div>
-              <Button
-                className="w-full"
-                onClick={() => saveAnnouncement.mutate(announcementForm)}
-                disabled={saveAnnouncement.isPending || !announcementForm.title}
-              >
-                {saveAnnouncement.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {editingAnnouncement ? "Salvar Alterações" : "Criar Anúncio"}
-              </Button>
+              <div className="sticky bottom-0 left-0 right-0 bg-background/90 backdrop-blur border-t pt-3">
+                <Button
+                  className="w-full"
+                  onClick={() => saveAnnouncement.mutate(announcementForm)}
+                  disabled={saveAnnouncement.isPending || !announcementForm.title}
+                >
+                  {saveAnnouncement.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  {editingAnnouncement ? "Salvar Alterações" : "Criar Anúncio"}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
