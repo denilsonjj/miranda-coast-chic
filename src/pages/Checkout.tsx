@@ -313,6 +313,59 @@ const Checkout = () => {
     setPaymentResult(null);
 
     try {
+      if (cartItems.length === 0) {
+        toast.error("Seu carrinho está vazio");
+        setIsLoading(false);
+        setIsPaying(false);
+        return;
+      }
+
+      const productIds = cartItems.map((item) => item.product_id);
+      const { data: productsStock, error: stockError } = await supabase
+        .from("products")
+        .select("id, stock, name, is_active")
+        .in("id", productIds);
+
+      if (stockError) {
+        console.error("Stock check error:", stockError);
+        toast.error("Não foi possível validar o estoque. Tente novamente.");
+        setIsLoading(false);
+        setIsPaying(false);
+        return;
+      }
+
+      const stockMap = (productsStock || []).reduce((acc: Record<string, any>, product: any) => {
+        acc[product.id] = product;
+        return acc;
+      }, {});
+
+      for (const item of cartItems) {
+        const productInfo = stockMap[item.product_id];
+        const productName = productInfo?.name || item.product?.name || "Produto";
+        const available = typeof productInfo?.stock === "number" ? productInfo.stock : 0;
+
+        if (!productInfo || !productInfo.is_active) {
+          toast.error(`O produto ${productName} está indisponível.`);
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+
+        if (available <= 0) {
+          toast.error(`O produto ${productName} está esgotado.`);
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+
+        if (item.quantity > available) {
+          toast.error(`Só temos ${available} unidade(s) de ${productName} em estoque. Ajuste o carrinho para continuar.`);
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+      }
+
       const orderTotal = cartTotal + (selectedShipping?.price || 0);
 
       const { data: order, error: orderError } = await supabase
@@ -382,6 +435,29 @@ const Checkout = () => {
         setIsLoading(false);
         setIsPaying(false);
         return;
+      }
+
+      for (const item of cartItems) {
+        const productInfo = stockMap[item.product_id];
+        if (!productInfo) continue;
+
+        const currentStock = typeof productInfo.stock === "number" ? productInfo.stock : 0;
+        const newStock = Math.max(0, currentStock - item.quantity);
+
+        const { error: stockUpdateError } = await supabase
+          .from("products")
+          .update({ stock: newStock })
+          .eq("id", item.product_id);
+
+        if (stockUpdateError) {
+          console.error("Stock update error:", stockUpdateError);
+          toast.error("Pedido criado, mas houve erro ao atualizar o estoque. Entre em contato.");
+          setIsLoading(false);
+          setIsPaying(false);
+          return;
+        }
+
+        stockMap[item.product_id] = { ...productInfo, stock: newStock };
       }
 
       let paymentMethodId =

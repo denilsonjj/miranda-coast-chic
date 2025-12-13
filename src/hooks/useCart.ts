@@ -14,6 +14,7 @@ export interface CartItem {
     name: string;
     price: number;
     images: string[];
+    stock?: number;
   };
 }
 
@@ -38,7 +39,8 @@ export const useCart = () => {
             id,
             name,
             price,
-            images
+            images,
+            stock
           )
         `)
         .eq('user_id', user.id);
@@ -47,7 +49,7 @@ export const useCart = () => {
 
       return (data || []).map((item: any) => ({
         ...item,
-        product: item.products || { id: '', name: '', price: 0, images: [] },
+        product: item.products || { id: '', name: '', price: 0, images: [], stock: 0 },
       })) as CartItem[];
     },
     enabled: !!user,
@@ -62,15 +64,21 @@ export const useCart = () => {
     }) => {
       if (!user) throw new Error('Você precisa estar logado');
 
-      // Validate required variations for the product
+      // Validate required variations and available stock for the product
       const { data: product, error: productError } = await supabase
         .from('products')
-        .select('sizes, colors, name')
+        .select('sizes, colors, name, stock, is_active')
         .eq('id', productId)
         .maybeSingle();
 
       if (productError) throw productError;
       if (!product) throw new Error('Produto não encontrado');
+
+      const availableStock = typeof product.stock === 'number' ? product.stock : 0;
+
+      if (!product.is_active || availableStock <= 0) {
+        throw new Error(`${product.name || 'Produto'} está esgotado no momento.`);
+      }
 
       const sizeRequired = Array.isArray(product?.sizes) && product.sizes.length > 0;
       const colorRequired = Array.isArray(product?.colors) && product.colors.length > 0;
@@ -97,6 +105,11 @@ export const useCart = () => {
       query = colorValue === null ? query.is('color', null) : query.eq('color', colorValue);
 
       const { data: existing } = await query.maybeSingle();
+
+      const desiredQuantity = (existing?.quantity || 0) + quantity;
+      if (desiredQuantity > availableStock) {
+        throw new Error(`Temos apenas ${availableStock} unidade(s) de ${product.name || 'estoque'} no momento.`);
+      }
 
       if (existing) {
         const { error } = await supabase
@@ -128,22 +141,47 @@ export const useCart = () => {
 
   const updateQuantity = useMutation({
     mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {
+      if (!user) throw new Error('Você precisa estar logado');
+
+      const { data: cartItem, error: cartItemError } = await supabase
+        .from('cart_items')
+        .select(`product_id, products (stock, name)`)
+        .eq('id', itemId)
+        .single();
+
+      if (cartItemError) throw cartItemError;
+
+      const productName = cartItem?.products?.name || 'o produto';
+      const availableStock = typeof cartItem?.products?.stock === 'number' ? cartItem.products.stock : 0;
+
       if (quantity <= 0) {
         const { error } = await supabase
           .from('cart_items')
           .delete()
           .eq('id', itemId);
         if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('cart_items')
-          .update({ quantity })
-          .eq('id', itemId);
-        if (error) throw error;
+        return;
       }
+
+      if (availableStock <= 0) {
+        throw new Error(`${productName} está esgotado.`);
+      }
+
+      if (quantity > availableStock) {
+        throw new Error(`Quantidade indisponível. Estoque atual de ${productName}: ${availableStock}.`);
+      }
+
+      const { error } = await supabase
+        .from('cart_items')
+        .update({ quantity })
+        .eq('id', itemId);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao atualizar quantidade');
     },
   });
 

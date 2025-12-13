@@ -62,61 +62,87 @@ const CartSheet = ({ children }: CartSheetProps) => {
         ) : (
           <div className="flex flex-col h-full">
             <div className="flex-1 overflow-y-auto py-4 space-y-4">
-              {cartItems.map((item) => (
-                <div key={item.id} className="flex gap-4 p-4 bg-secondary/30 rounded-lg">
-                  <div className="w-20 h-20 bg-muted rounded-md overflow-hidden flex-shrink-0">
-                    {item.product.images?.[0] ? (
-                      <img 
-                        src={item.product.images[0]} 
-                        alt={item.product.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <ShoppingBag className="h-8 w-8" />
+              {cartItems.map((item) => {
+                const availableStock =
+                  typeof item.product.stock === 'number' ? item.product.stock : null;
+                const outOfStock = availableStock !== null && availableStock <= 0;
+                const atLimit =
+                  availableStock !== null && availableStock > 0 && item.quantity >= availableStock;
+
+                return (
+                  <div key={item.id} className="flex gap-4 p-4 bg-secondary/30 rounded-lg">
+                    <div className="w-20 h-20 bg-muted rounded-md overflow-hidden flex-shrink-0">
+                      {item.product.images?.[0] ? (
+                        <img 
+                          src={item.product.images[0]} 
+                          alt={item.product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <ShoppingBag className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium truncate">{item.product.name}</h4>
+                      {(item.size || item.color) && (
+                        <p className="text-sm text-muted-foreground">
+                          {item.size && `Tam: ${item.size}`}
+                          {item.size && item.color && ' | '}
+                          {item.color && `Cor: ${item.color}`}
+                        </p>
+                      )}
+                      <p className="text-primary font-semibold">{formatPrice(item.product.price)}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => updateQuantity.mutate({ itemId: item.id, quantity: item.quantity - 1 })}
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <span className="w-8 text-center">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => updateQuantity.mutate({ itemId: item.id, quantity: item.quantity + 1 })}
+                          disabled={outOfStock || atLimit}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 ml-auto text-destructive"
+                          onClick={() => removeFromCart.mutate(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{item.product.name}</h4>
-                    {(item.size || item.color) && (
-                      <p className="text-sm text-muted-foreground">
-                        {item.size && `Tam: ${item.size}`}
-                        {item.size && item.color && ' | '}
-                        {item.color && `Cor: ${item.color}`}
-                      </p>
-                    )}
-                    <p className="text-primary font-semibold">{formatPrice(item.product.price)}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => updateQuantity.mutate({ itemId: item.id, quantity: item.quantity - 1 })}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-8 text-center">{item.quantity}</span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => updateQuantity.mutate({ itemId: item.id, quantity: item.quantity + 1 })}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 ml-auto text-destructive"
-                        onClick={() => removeFromCart.mutate(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {availableStock !== null && (
+                        <p
+                          className={`text-xs mt-1 ${
+                            outOfStock
+                              ? 'text-red-600'
+                              : atLimit
+                              ? 'text-amber-600'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {outOfStock
+                            ? 'Esgotado no momento. Remova ou ajuste a quantidade.'
+                            : atLimit
+                            ? `Limite de estoque: ${availableStock} unidade(s).`
+                            : `Em estoque: ${availableStock} unidade(s).`}
+                        </p>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             
             <div className="border-t pt-4 space-y-4">

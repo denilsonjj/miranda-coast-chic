@@ -278,6 +278,23 @@ const Home = () => {
                       </span>
                     )}
                   </div>
+                  {typeof product.stock === 'number' && (
+                    <p
+                      className={`text-xs mb-3 ${
+                        product.stock === 0
+                          ? 'text-red-600'
+                          : product.stock <= 5
+                          ? 'text-amber-600'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {product.stock === 0
+                        ? 'Esgotado no momento'
+                        : product.stock <= 5
+                        ? `Restam ${product.stock} unidade(s) em estoque`
+                        : `Estoque: ${product.stock} unidade(s)`}
+                    </p>
+                  )}
                   <Button 
                     className="w-full" 
                     size="sm"

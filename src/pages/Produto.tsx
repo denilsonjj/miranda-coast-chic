@@ -56,6 +56,7 @@ const ProductDetails = () => {
   };
 
   const handleAddToCart = async () => {
+    if (!product) return;
     // Validar seleção de tamanho
     if (product?.sizes && product.sizes.length > 0 && !selectedSize) {
       toast.error('Por favor, selecione um tamanho');
@@ -70,6 +71,18 @@ const ProductDetails = () => {
     if (!user) {
       toast.error('Você precisa estar logado para adicionar ao carrinho');
       navigate('/auth');
+      return;
+    }
+
+    const availableStock = typeof product.stock === 'number' ? product.stock : 0;
+    if (availableStock <= 0) {
+      toast.error('Este produto está esgotado no momento.');
+      return;
+    }
+
+    if (quantity > availableStock) {
+      toast.error(`Só temos ${availableStock} unidade(s) disponíveis.`);
+      setQuantity(availableStock);
       return;
     }
 
@@ -119,6 +132,10 @@ const ProductDetails = () => {
   const discountPercentage = hasDiscount
     ? Math.round(((product.original_price - product.price) / product.original_price) * 100)
     : 0;
+
+  const availableStock = typeof product.stock === 'number' ? product.stock : 0;
+  const isOutOfStock = availableStock <= 0;
+  const lowStock = availableStock > 0 && availableStock <= 5;
 
   return (
     <div className="min-h-screen pt-24 pb-12">
@@ -251,24 +268,58 @@ const ProductDetails = () => {
               <label className="text-sm font-semibold">Quantidade</label>
               <div className="flex items-center border rounded-lg w-fit">
                 <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  onClick={() => setQuantity((prev) => Math.max(1, Math.min(prev - 1, Math.max(availableStock, 1))))}
                   className="px-4 py-2 hover:bg-muted transition-colors"
+                  disabled={isOutOfStock || quantity <= 1}
                 >
                   −
                 </button>
                 <input
                   type="number"
                   min="1"
+                  max={Math.max(availableStock, 1)}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => {
+                    const next = Math.max(1, parseInt(e.target.value) || 1);
+                    const capped = availableStock ? Math.min(next, availableStock) : next;
+                    setQuantity(capped);
+                  }}
                   className="w-12 text-center border-x py-2 focus:outline-none"
+                  disabled={isOutOfStock}
                 />
                 <button
-                  onClick={() => setQuantity(quantity + 1)}
+                  onClick={() =>
+                    setQuantity((prev) =>
+                      availableStock ? Math.min(prev + 1, availableStock) : prev + 1
+                    )
+                  }
                   className="px-4 py-2 hover:bg-muted transition-colors"
+                  disabled={isOutOfStock || (availableStock ? quantity >= availableStock : false)}
                 >
                   +
                 </button>
+              </div>
+              <div className="space-y-1">
+                {isOutOfStock ? (
+                  <p className="text-sm text-red-600">Este produto está esgotado no momento.</p>
+                ) : (
+                  <>
+                    <p
+                      className={`text-sm ${
+                        lowStock ? 'text-amber-600' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {lowStock
+                        ? `Restam apenas ${availableStock} unidade(s) em estoque.`
+                        : `Estoque disponível: ${availableStock} unidade(s).`}
+                    </p>
+                    {quantity >= availableStock && availableStock > 0 && (
+                      <p className="text-xs text-amber-700">
+                        Limite máximo disponível atingido.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -280,6 +331,7 @@ const ProductDetails = () => {
                 onClick={handleAddToCart}
                 disabled={
                   isAddingToCart ||
+                  isOutOfStock ||
                   !product.is_active ||
                   (product.sizes && product.sizes.length > 0 && !selectedSize) ||
                   (product.colors && product.colors.length > 0 && !selectedColor)
@@ -309,9 +361,11 @@ const ProductDetails = () => {
             </div>
 
             {/* Stock Warning */}
-            {!product.is_active && (
+            {(!product.is_active || isOutOfStock) && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-sm">
-                Este produto não está disponível no momento
+                {!product.is_active
+                  ? 'Este produto não está disponível no momento'
+                  : 'Este produto está esgotado no momento'}
               </div>
             )}
 
