@@ -10,6 +10,7 @@ import { Loader2, Plus, Edit, EyeOff, Eye, Layers } from "lucide-react";
 type CategoryForm = {
   name: string;
   image_url: string;
+  link_url: string;
   display_order: number;
   is_active: boolean;
 };
@@ -77,6 +78,17 @@ export const CategoriesTab = ({
                   folder="categories"
                   helperText="Envie uma imagem ou remova para trocar"
                 />
+              </div>
+              <div>
+                <Label>Link da categoria</Label>
+                <Input
+                  placeholder="/loja?category=Vestidos"
+                  value={categoryForm.link_url}
+                  onChange={(e) => setCategoryForm((c) => ({ ...c, link_url: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deixe vazio para usar automaticamente "/loja?category=Nome".
+                </p>
               </div>
               <div>
                 <Label>Ordem</Label>

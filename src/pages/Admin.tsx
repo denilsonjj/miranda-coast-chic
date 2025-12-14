@@ -104,6 +104,7 @@ const Admin = () => {
   const [categoryForm, setCategoryForm] = useState({
     name: "",
     image_url: "",
+    link_url: "",
     display_order: 0,
     is_active: true,
   });
@@ -471,6 +472,7 @@ const Admin = () => {
       const payload = {
         name: category.name,
         image_url: category.image_url || null,
+        link_url: category.link_url || null,
         display_order: category.display_order || 0,
         is_active: category.is_active,
       };
@@ -602,6 +604,7 @@ const Admin = () => {
     setCategoryForm({
       name: "",
       image_url: "",
+      link_url: "",
       display_order: 0,
       is_active: true,
     });
@@ -665,6 +668,7 @@ const Admin = () => {
     setCategoryForm({
       name: category.name,
       image_url: category.image_url || "",
+      link_url: category.link_url || "",
       display_order: category.display_order || 0,
       is_active: category.is_active,
     });

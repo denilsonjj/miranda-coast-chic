@@ -324,7 +324,7 @@ const Home = () => {
               return (
                 <Link
                   key={category.name}
-                  to="/loja"
+                  to={category.link_url || `/loja?category=${encodeURIComponent(category.name)}`}
                   className="group relative overflow-hidden rounded-lg shadow-medium hover:shadow-large transition-smooth"
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
