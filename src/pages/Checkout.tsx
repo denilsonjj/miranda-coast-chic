@@ -99,7 +99,19 @@ const Checkout = () => {
   const [mpScriptLoaded, setMpScriptLoaded] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
 
-  const total = useMemo(() => cartTotal + (selectedShipping?.price || 0), [cartTotal, selectedShipping]);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+
+  const discountedSubtotal = useMemo(
+    () => Math.max(0, cartTotal - couponDiscount),
+    [cartTotal, couponDiscount]
+  );
+
+  const total = useMemo(
+    () => discountedSubtotal + (selectedShipping?.price || 0),
+    [discountedSubtotal, selectedShipping]
+  );
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -118,6 +130,23 @@ const Checkout = () => {
       toast.error("Seu carrinho está vazio");
     }
   }, [cartItems, cartLoading, user, navigate, orderId, paymentResult]);
+
+  const calculateDiscount = (coupon: any) => {
+    if (!coupon) return 0;
+    const valueNum = Number(coupon.value) || 0;
+    if (coupon.type === "percent") {
+      return Math.min(cartTotal, (cartTotal * valueNum) / 100);
+    }
+    return Math.min(cartTotal, valueNum);
+  };
+
+  useEffect(() => {
+    if (appliedCoupon) {
+      setCouponDiscount(calculateDiscount(appliedCoupon));
+    } else {
+      setCouponDiscount(0);
+    }
+  }, [appliedCoupon, cartTotal]);
 
   useEffect(() => {
     if (step === 3 && paymentMethod === "card" && MERCADO_PAGO_PUBLIC_KEY) {
@@ -267,6 +296,54 @@ const Checkout = () => {
     }
   };
 
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      toast.error("Digite um código de cupom");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .eq("code", code)
+      .maybeSingle();
+
+    if (error) {
+      toast.error("Erro ao validar cupom");
+      return;
+    }
+
+    if (!data) {
+      toast.error("Cupom não encontrado");
+      return;
+    }
+
+    if (data.is_active === false) {
+      toast.error("Este cupom não está ativo");
+      return;
+    }
+
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      toast.error("Este cupom expirou");
+      return;
+    }
+
+    if (data.min_order_value && cartTotal < Number(data.min_order_value)) {
+      toast.error(`Pedido mínimo de R$ ${Number(data.min_order_value).toFixed(2)} para usar este cupom.`);
+      return;
+    }
+
+    setAppliedCoupon(data);
+    toast.success("Cupom aplicado!");
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponDiscount(0);
+  };
+
   const handleNextStep = async () => {
     if (step === 1) {
       const docClean = address.document.replace(/\D/g, "");
@@ -392,7 +469,7 @@ const Checkout = () => {
         }
       }
 
-      const orderTotal = cartTotal + (selectedShipping?.price || 0);
+      const orderTotal = Math.max(0, discountedSubtotal) + (selectedShipping?.price || 0);
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -400,6 +477,8 @@ const Checkout = () => {
           user_id: user!.id,
           subtotal: cartTotal,
           shipping_cost: selectedShipping.price,
+          discount_total: couponDiscount,
+          coupon_code: appliedCoupon?.code || null,
           total: orderTotal,
           shipping_address: {
             ...address,
@@ -593,6 +672,9 @@ const Checkout = () => {
               .filter(Boolean)
               .join(" | ") || undefined,
           })),
+          discount_amount: couponDiscount,
+          coupon_code: appliedCoupon?.code || null,
+          total,
           payer: {
             email: payerEmail,
             name: `${payerFirstName} ${payerLastName}`.trim(),
@@ -1120,11 +1202,45 @@ const Checkout = () => {
                   </div>
                 ))}
 
+                <div className="space-y-2 border-t pt-3">
+                  <Label>Cupom de desconto</Label>
+                  <div className="flex gap-2 flex-col sm:flex-row">
+                    <Input
+                      placeholder="Digite seu cupom"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      className="flex-1"
+                      disabled={!!appliedCoupon}
+                    />
+                    {appliedCoupon ? (
+                      <Button variant="outline" onClick={handleRemoveCoupon}>
+                        Remover
+                      </Button>
+                    ) : (
+                      <Button onClick={handleApplyCoupon}>Aplicar</Button>
+                    )}
+                  </div>
+                  {appliedCoupon && (
+                    <div className="text-xs text-muted-foreground">
+                      Cupom aplicado: <span className="font-semibold">{appliedCoupon.code}</span> — desconto de{" "}
+                      {appliedCoupon.type === "percent"
+                        ? `${appliedCoupon.value}%`
+                        : formatPrice(Number(appliedCoupon.value))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="border-t pt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal</span>
                     <span>{formatPrice(cartTotal)}</span>
                   </div>
+                  {couponDiscount > 0 && (
+                    <div className="flex justify-between text-sm text-green-700">
+                      <span>Desconto</span>
+                      <span>- {formatPrice(couponDiscount)}</span>
+                    </div>
+                  )}
                   {selectedShipping && (
                     <div className="flex justify-between text-sm">
                       <span>Frete</span>

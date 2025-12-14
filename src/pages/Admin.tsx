@@ -26,10 +26,12 @@ import {
   EyeOff,
   Image as ImageIcon,
   Layers,
+  Tag,
 } from "lucide-react";
 import { OrdersTab } from "@/components/admin/OrdersTab";
 import { AnnouncementsTab } from "@/pages/admin/tabs/AnnouncementsTab";
 import { CategoriesTab } from "@/pages/admin/tabs/CategoriesTab";
+import { CouponsTab } from "@/pages/admin/tabs/CouponsTab";
 import {
   Dialog,
   DialogContent,
@@ -71,9 +73,11 @@ const Admin = () => {
   const [productDialog, setProductDialog] = useState(false);
   const [announcementDialog, setAnnouncementDialog] = useState(false);
   const [categoryDialog, setCategoryDialog] = useState(false);
+  const [couponDialog, setCouponDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
   const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [editingCoupon, setEditingCoupon] = useState<any>(null);
 
   const [productForm, setProductForm] = useState({
     name: "",
@@ -114,6 +118,15 @@ const Admin = () => {
   });
 
   const [variantRows, setVariantRows] = useState<VariantFormRow[]>([]);
+
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    type: "percent" as "percent" | "amount",
+    value: "",
+    min_order_value: "",
+    expires_at: "",
+    is_active: true,
+  });
 
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["admin-products"],
@@ -175,6 +188,19 @@ const Admin = () => {
         .select("*")
         .order("display_order", { ascending: true })
         .order("name", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
+
+  const { data: coupons = [], isLoading: couponsLoading } = useQuery({
+    queryKey: ["admin-coupons"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("coupons")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -492,6 +518,57 @@ const Admin = () => {
     },
   });
 
+  const saveCoupon = useMutation({
+    mutationFn: async (coupon: any) => {
+      if (!coupon.code) throw new Error("Código é obrigatório");
+      const payload = {
+        code: coupon.code.toUpperCase(),
+        type: coupon.type,
+        value: parseFloat(coupon.value) || 0,
+        min_order_value: coupon.min_order_value ? parseFloat(coupon.min_order_value) : null,
+        expires_at: coupon.expires_at ? new Date(coupon.expires_at).toISOString() : null,
+        is_active: coupon.is_active,
+      };
+
+      if (editingCoupon) {
+        const { error } = await supabase
+          .from("coupons")
+          .update(payload)
+          .eq("id", editingCoupon.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("coupons").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-coupons"] });
+      setCouponDialog(false);
+      resetCouponForm();
+      toast.success(editingCoupon ? "Cupom atualizado!" : "Cupom criado!");
+    },
+    onError: (error: any) => {
+      toast.error("Erro ao salvar cupom: " + error.message);
+    },
+  });
+
+  const toggleCouponStatus = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from("coupons")
+        .update({ is_active: !isActive })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-coupons"] });
+      toast.success(isActive ? "Cupom desativado!" : "Cupom ativado!");
+    },
+    onError: (error: any) => {
+      toast.error("Erro ao alterar cupom: " + error.message);
+    },
+  });
+
   const resetProductForm = () => {
     setProductForm({
       name: "",
@@ -529,6 +606,18 @@ const Admin = () => {
       is_active: true,
     });
     setEditingCategory(null);
+  };
+
+  const resetCouponForm = () => {
+    setCouponForm({
+      code: "",
+      type: "percent",
+      value: "",
+      min_order_value: "",
+      expires_at: "",
+      is_active: true,
+    });
+    setEditingCoupon(null);
   };
 
   const openEditProduct = (product: any) => {
@@ -580,6 +669,19 @@ const Admin = () => {
       is_active: category.is_active,
     });
     setCategoryDialog(true);
+  };
+
+  const openEditCoupon = (coupon: any) => {
+    setEditingCoupon(coupon);
+    setCouponForm({
+      code: coupon.code || "",
+      type: coupon.type || "percent",
+      value: coupon.value?.toString() || "",
+      min_order_value: coupon.min_order_value?.toString() || "",
+      expires_at: coupon.expires_at ? coupon.expires_at.substring(0, 16) : "",
+      is_active: coupon.is_active !== false,
+    });
+    setCouponDialog(true);
   };
 
   const formatPrice = (price: number) => {
@@ -645,6 +747,13 @@ const Admin = () => {
             >
               <Layers className="h-4 w-4" />
               Categorias
+            </TabsTrigger>
+            <TabsTrigger
+              value="coupons"
+              className="flex-1 sm:flex-none whitespace-nowrap text-sm sm:text-base px-3 sm:px-4 py-2 flex items-center gap-2"
+            >
+              <Tag className="h-4 w-4" />
+              Cupons
             </TabsTrigger>
             <TabsTrigger
               value="announcements"
@@ -1042,6 +1151,22 @@ const Admin = () => {
               resetCategoryForm={resetCategoryForm}
               saveCategory={saveCategory}
               toggleCategoryStatus={toggleCategoryStatus}
+            />
+          </TabsContent>
+
+          <TabsContent value="coupons">
+            <CouponsTab
+              coupons={coupons}
+              isLoading={couponsLoading}
+              dialogOpen={couponDialog}
+              setDialogOpen={setCouponDialog}
+              couponForm={couponForm}
+              setCouponForm={setCouponForm}
+              editingCoupon={editingCoupon}
+              openEditCoupon={openEditCoupon}
+              resetCouponForm={resetCouponForm}
+              saveCoupon={saveCoupon}
+              toggleCouponStatus={toggleCouponStatus}
             />
           </TabsContent>
 

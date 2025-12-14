@@ -102,6 +102,19 @@ CREATE TABLE public.cart_items (
   UNIQUE(user_id, product_id, size, color)
 );
 
+-- Coupons
+DROP TABLE IF EXISTS public.coupons CASCADE;
+CREATE TABLE public.coupons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL CHECK (type IN ('percent', 'amount')),
+  value DECIMAL(10,2) NOT NULL,
+  min_order_value DECIMAL(10,2),
+  expires_at TIMESTAMP WITH TIME ZONE,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
 -- Orders
 DROP TABLE IF EXISTS public.orders CASCADE;
 CREATE TABLE public.orders (
@@ -110,6 +123,8 @@ CREATE TABLE public.orders (
   status TEXT NOT NULL DEFAULT 'pending',
   subtotal DECIMAL(10,2) NOT NULL,
   shipping_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount_total DECIMAL(10,2) NOT NULL DEFAULT 0,
+  coupon_code TEXT,
   total DECIMAL(10,2) NOT NULL,
   shipping_address JSONB NOT NULL,
   shipping_service JSONB,

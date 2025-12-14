@@ -193,6 +193,8 @@ export type Database = {
       orders: {
         Row: {
           created_at: string
+          coupon_code: string | null
+          discount_total: number | null
           id: string
           payment_intent_id: string | null
           payment_status: string | null
@@ -222,6 +224,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          coupon_code?: string | null
+          discount_total?: number | null
           created_at?: string
           id?: string
           payment_intent_id?: string | null
@@ -235,6 +239,39 @@ export type Database = {
           tracking_code?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      coupons: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          min_order_value: number | null
+          type: string
+          value: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_order_value?: number | null
+          type: string
+          value: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          min_order_value?: number | null
+          type?: string
+          value?: number
         }
         Relationships: []
       }
