@@ -521,12 +521,21 @@ const Checkout = () => {
 
       setOrderId(order.id);
 
+      const getDiscountedUnitPrice = (item: any) => {
+        if (!appliedCoupon || couponDiscount <= 0 || cartTotal <= 0) return item.product.price;
+        const gross = item.product.price * item.quantity;
+        const share = gross / cartTotal;
+        const itemDiscount = couponDiscount * share;
+        const unit = (gross - itemDiscount) / item.quantity;
+        return Number(Math.max(0, unit).toFixed(2));
+      };
+
       const orderItems = cartItems.map((item) => ({
         order_id: order.id,
         product_id: item.product_id,
         product_name: item.product.name,
         product_image: item.product.images?.[0] || null,
-        price: item.product.price,
+        price: getDiscountedUnitPrice(item),
         quantity: item.quantity,
         size: item.size || null,
         color: item.color || null,

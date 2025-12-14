@@ -24,6 +24,8 @@ interface Order {
   shipping_status?: string;
   subtotal: number;
   shipping_cost: number;
+  discount_total?: number;
+  coupon_code?: string | null;
   total: number;
   shipping_address: {
     name?: string;
@@ -95,6 +97,8 @@ const Pedido = () => {
           shipping_address: orderData.shipping_address as Order['shipping_address'],
           shipping_service: orderData.shipping_service as Order['shipping_service'],
           items: itemsData,
+          discount_total: (orderData as any).discount_total ?? 0,
+          coupon_code: (orderData as any).coupon_code || null,
         });
       } catch (error) {
         console.error('Error fetching order:', error);
@@ -401,6 +405,12 @@ const Pedido = () => {
                 <span>Subtotal</span>
                 <span>{formatPrice(order.subtotal)}</span>
               </div>
+              {order.discount_total && order.discount_total > 0 && (
+                <div className="flex justify-between text-green-700 text-sm">
+                  <span>Desconto {order.coupon_code ? `(Cupom: ${order.coupon_code})` : ""}</span>
+                  <span>- {formatPrice(order.discount_total)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Frete</span>
                 <span>{formatPrice(order.shipping_cost)}</span>
