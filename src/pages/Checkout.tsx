@@ -297,6 +297,12 @@ const Checkout = () => {
   };
 
   const handleApplyCoupon = async () => {
+    if (!user) {
+      toast.error("Faça login para aplicar um cupom");
+      navigate("/auth");
+      return;
+    }
+
     const code = couponCode.trim().toUpperCase();
     if (!code) {
       toast.error("Digite um código de cupom");
@@ -332,6 +338,36 @@ const Checkout = () => {
     if (data.min_order_value && cartTotal < Number(data.min_order_value)) {
       toast.error(`Pedido mínimo de R$ ${Number(data.min_order_value).toFixed(2)} para usar este cupom.`);
       return;
+    }
+
+    if (data.max_uses && data.max_uses > 0) {
+      const { count: usesCount, error: usesError } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("coupon_code", code);
+      if (usesError) {
+        toast.error("Erro ao validar uso do cupom");
+        return;
+      }
+      if ((usesCount || 0) >= data.max_uses) {
+        toast.error("Este cupom já atingiu o limite de usos.");
+        return;
+      }
+    }
+
+    if (data.first_purchase_only) {
+      const { count: userOrders, error: userOrdersError } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if (userOrdersError) {
+        toast.error("Erro ao validar elegibilidade do cupom");
+        return;
+      }
+      if ((userOrders || 0) > 0) {
+        toast.error("Este cupom é válido apenas para a primeira compra.");
+        return;
+      }
     }
 
     setAppliedCoupon(data);

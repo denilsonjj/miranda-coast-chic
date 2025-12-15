@@ -14,6 +14,8 @@ type CouponForm = {
   value: string;
   min_order_value: string;
   expires_at: string;
+  max_uses: string;
+  first_purchase_only: boolean;
   is_active: boolean;
 };
 
@@ -112,6 +114,26 @@ export const CouponsTab = ({
                     value={couponForm.min_order_value}
                     onChange={(e) => setCouponForm((c) => ({ ...c, min_order_value: e.target.value }))}
                   />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Limite de usos</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Deixe vazio para ilimitado"
+                    value={couponForm.max_uses}
+                    onChange={(e) => setCouponForm((c) => ({ ...c, max_uses: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">0 ou vazio = sem limite.</p>
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch
+                    checked={couponForm.first_purchase_only}
+                    onCheckedChange={(v) => setCouponForm((c) => ({ ...c, first_purchase_only: v }))}
+                  />
+                  <Label>Somente primeira compra</Label>
                 </div>
               </div>
               <div>

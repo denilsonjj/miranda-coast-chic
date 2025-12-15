@@ -247,8 +247,10 @@ export type Database = {
           code: string
           created_at: string
           expires_at: string | null
+          first_purchase_only: boolean | null
           id: string
           is_active: boolean | null
+          max_uses: number | null
           min_order_value: number | null
           type: string
           value: number
@@ -257,8 +259,10 @@ export type Database = {
           code: string
           created_at?: string
           expires_at?: string | null
+          first_purchase_only?: boolean | null
           id?: string
           is_active?: boolean | null
+          max_uses?: number | null
           min_order_value?: number | null
           type: string
           value: number
@@ -267,8 +271,10 @@ export type Database = {
           code?: string
           created_at?: string
           expires_at?: string | null
+          first_purchase_only?: boolean | null
           id?: string
           is_active?: boolean | null
+          max_uses?: number | null
           min_order_value?: number | null
           type?: string
           value?: number

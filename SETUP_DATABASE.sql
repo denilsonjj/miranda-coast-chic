@@ -111,6 +111,8 @@ CREATE TABLE public.coupons (
   value DECIMAL(10,2) NOT NULL,
   min_order_value DECIMAL(10,2),
   expires_at TIMESTAMP WITH TIME ZONE,
+  max_uses INTEGER,
+  first_purchase_only BOOLEAN DEFAULT false,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );

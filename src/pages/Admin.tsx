@@ -126,6 +126,8 @@ const Admin = () => {
     value: "",
     min_order_value: "",
     expires_at: "",
+    max_uses: "",
+    first_purchase_only: false,
     is_active: true,
   });
 
@@ -529,6 +531,8 @@ const Admin = () => {
         value: parseFloat(coupon.value) || 0,
         min_order_value: coupon.min_order_value ? parseFloat(coupon.min_order_value) : null,
         expires_at: coupon.expires_at ? new Date(coupon.expires_at).toISOString() : null,
+        max_uses: coupon.max_uses ? parseInt(coupon.max_uses) || null : null,
+        first_purchase_only: coupon.first_purchase_only,
         is_active: coupon.is_active,
       };
 
@@ -618,6 +622,8 @@ const Admin = () => {
       value: "",
       min_order_value: "",
       expires_at: "",
+      max_uses: "",
+      first_purchase_only: false,
       is_active: true,
     });
     setEditingCoupon(null);
@@ -683,6 +689,8 @@ const Admin = () => {
       value: coupon.value?.toString() || "",
       min_order_value: coupon.min_order_value?.toString() || "",
       expires_at: coupon.expires_at ? coupon.expires_at.substring(0, 16) : "",
+      max_uses: coupon.max_uses?.toString() || "",
+      first_purchase_only: coupon.first_purchase_only ?? false,
       is_active: coupon.is_active !== false,
     });
     setCouponDialog(true);
