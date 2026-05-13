@@ -196,11 +196,15 @@ export type Database = {
           coupon_code: string | null
           discount_total: number | null
           id: string
+          melhor_envio_id: string | null
+          mercado_pago_payment_id: string | null
           payment_intent_id: string | null
           payment_status: string | null
           shipping_address: Json
           shipping_cost: number
+          shipping_label_url: string | null
           shipping_service: Json | null
+          shipping_status: string | null
           status: string
           subtotal: number
           total: number
@@ -211,11 +215,15 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          melhor_envio_id?: string | null
+          mercado_pago_payment_id?: string | null
           payment_intent_id?: string | null
           payment_status?: string | null
           shipping_address: Json
           shipping_cost?: number
+          shipping_label_url?: string | null
           shipping_service?: Json | null
+          shipping_status?: string | null
           status?: string
           subtotal: number
           total: number
@@ -228,11 +236,15 @@ export type Database = {
           discount_total?: number | null
           created_at?: string
           id?: string
+          melhor_envio_id?: string | null
+          mercado_pago_payment_id?: string | null
           payment_intent_id?: string | null
           payment_status?: string | null
           shipping_address?: Json
           shipping_cost?: number
+          shipping_label_url?: string | null
           shipping_service?: Json | null
+          shipping_status?: string | null
           status?: string
           subtotal?: number
           total?: number
@@ -426,6 +438,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      confirm_paid_order_and_decrement_stock: {
+        Args: {
+          _order_id: string
+          _mercado_pago_payment_id?: string | null
+        }
+        Returns: undefined
       }
     }
     Enums: {

@@ -22,6 +22,27 @@ interface ShippingRequest {
   products: ShippingProduct[];
 }
 
+const pickupOption = {
+  id: "pickup",
+  name: "Retirar na loja",
+  company: "Miranda Coast",
+  price: 0,
+  delivery_time: 0,
+  delivery_range: { min: 0, max: 0 },
+  currency: "BRL",
+  pickup: true,
+  address: {
+    name: "Miranda Coast",
+    street: "Rua Licurana",
+    number: "806",
+    district: "Tabuleiro",
+    city: "Camboriu",
+    state: "SC",
+    postal_code: "88348225",
+    phone: "",
+  },
+};
+
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,13 +56,17 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    const MELHOR_ENVIO_API_KEY = Deno.env.get("MELHOR_ENVIO_API_KEY");
+    const MELHOR_ENVIO_API_KEY =
+      Deno.env.get("MELHOR_ENVIO_API_KEY") || Deno.env.get("MELHOR_ENVIO_API_TOKEN");
 
     if (!MELHOR_ENVIO_API_KEY) {
       console.error("MELHOR_ENVIO_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "Shipping service not configured" }),
-        { status: 500, headers: corsHeaders },
+        JSON.stringify({
+          options: [pickupOption],
+          warning: "Shipping service not configured",
+        }),
+        { status: 200, headers: corsHeaders },
       );
     }
 
@@ -130,9 +155,10 @@ serve(async (req: Request): Promise<Response> => {
       console.error("Melhor Envio API error:", response.status, errorText);
       return new Response(
         JSON.stringify({
-          error: `Shipping API error: ${response.status}`,
+          options: [pickupOption],
+          warning: `Shipping API error: ${response.status}`,
         }),
-        { status: 502, headers: corsHeaders },
+        { status: 200, headers: corsHeaders },
       );
     }
 
@@ -166,28 +192,7 @@ serve(async (req: Request): Promise<Response> => {
       }))
       .sort((a: any, b: any) => a.price - b.price);
 
-    const pickupOption = {
-      id: "pickup",
-      name: "Retirar na loja",
-      company: "Miranda Coast",
-      price: 0,
-      delivery_time: 0,
-      delivery_range: { min: 0, max: 0 },
-      currency: "BRL",
-      pickup: true,
-      address: {
-        name: "Miranda Coast",
-        street: "Rua Licurana",
-        number: "806",
-        district: "Tabuleiro",
-        city: "Camboriú",
-        state: "SC",
-        postal_code: "88348225",
-        phone: "",
-      },
-    };
-
-    const optionsWithPickup = [...validOptions, pickupOption];
+    const optionsWithPickup = [pickupOption, ...validOptions];
 
     return new Response(
       JSON.stringify({ options: optionsWithPickup }),
@@ -197,9 +202,10 @@ serve(async (req: Request): Promise<Response> => {
     console.error("Error calculating shipping:", error);
     return new Response(
       JSON.stringify({
-        error: error?.message || "Failed to calculate shipping",
+        options: [pickupOption],
+        warning: error?.message || "Failed to calculate shipping",
       }),
-      { status: 500, headers: corsHeaders },
+      { status: 200, headers: corsHeaders },
     );
   }
 });

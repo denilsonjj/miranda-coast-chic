@@ -1,218 +1,238 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-signature, x-request-id",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const hex = (buffer: ArrayBuffer) =>
+  [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const timingSafeEqual = (a: string, b: string) => {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+};
+
+const hmacSha256 = async (secret: string, value: string) => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
+};
+
+const parseMercadoPagoSignature = (header: string) => {
+  return header.split(",").reduce<Record<string, string>>((acc, part) => {
+    const [key, ...valueParts] = part.trim().split("=");
+    if (key && valueParts.length) acc[key] = valueParts.join("=");
+    return acc;
+  }, {});
+};
+
+const validateMercadoPagoSignature = async (
+  req: Request,
+  url: URL,
+  body: any,
+) => {
+  const secret = Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET");
+  if (!secret) {
+    console.error("MERCADO_PAGO_WEBHOOK_SECRET not configured");
+    return false;
+  }
+
+  const signatureHeader = req.headers.get("x-signature") || "";
+  const requestId = req.headers.get("x-request-id") || "";
+  const signature = parseMercadoPagoSignature(signatureHeader);
+  const ts = signature.ts;
+  const v1 = signature.v1;
+  const dataId = url.searchParams.get("data.id") || url.searchParams.get("id") || body?.data?.id;
+
+  if (!requestId || !ts || !v1 || !dataId) {
+    return false;
+  }
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const expected = await hmacSha256(secret, manifest);
+  return timingSafeEqual(expected, v1);
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    // Mercado Pago sends notifications via GET or POST
-    // Prefer payload (POST) if available; fallback to query params
-    const url = new URL(req.url);
-    let topic = url.searchParams.get('topic') || url.searchParams.get('type');
-    let resourceId = url.searchParams.get('id');
+  if (req.method !== "POST" && req.method !== "GET") {
+    return json({ error: "Method not allowed" }, 405);
+  }
 
+  try {
+    const url = new URL(req.url);
+    const rawBody = req.method === "POST" ? await req.text() : "";
     let body: any = null;
-    if (req.method === 'POST') {
+
+    if (rawBody) {
       try {
-        body = await req.json();
-        // Examples:
-        // { action: 'payment.updated', data: { id: '123' }, type: 'payment' }
-        if (!topic && body?.type) topic = body.type;
-        if (!resourceId && body?.data?.id) resourceId = body.data.id;
-        if (!topic && body?.action) {
-          if (body.action.startsWith('payment')) topic = 'payment';
-          if (body.action.startsWith('merchant_order')) topic = 'merchant_order';
-        }
+        body = JSON.parse(rawBody);
       } catch {
-        // ignore body parse errors
+        return json({ error: "Invalid JSON" }, 400);
       }
     }
 
-    console.log('Webhook received - Topic:', topic, 'Resource ID:', resourceId);
+    const topic =
+      url.searchParams.get("topic") ||
+      url.searchParams.get("type") ||
+      body?.type ||
+      (typeof body?.action === "string" && body.action.startsWith("payment") ? "payment" : null) ||
+      (typeof body?.action === "string" && body.action.startsWith("merchant_order") ? "merchant_order" : null);
+    const resourceId = url.searchParams.get("data.id") || url.searchParams.get("id") || body?.data?.id;
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (resourceId === "123456") {
+      return json({ success: true, message: "Mercado Pago webhook test received" });
+    }
 
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase credentials not configured');
+    const signatureValid = await validateMercadoPagoSignature(req, url, body);
+    if (!signatureValid) {
+      console.warn("Mercado Pago webhook rejected: invalid signature");
+      return json({ error: "Invalid signature" }, 401);
+    }
+
+    if (!resourceId || (topic !== "payment" && topic !== "merchant_order")) {
+      return json({ success: true, message: "Webhook ignored" });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const mercadoPagoToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
+
+    if (!supabaseUrl || !supabaseKey || !mercadoPagoToken) {
+      throw new Error("Webhook dependencies not configured");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+    let paymentData: any = null;
 
-    // Handle payment notifications
-    if (topic === 'payment' || topic === 'merchant_order') {
-      const mercadoPagoToken = Deno.env.get('MERCADO_PAGO_ACCESS_TOKEN');
+    if (topic === "payment") {
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${resourceId}`, {
+        headers: { Authorization: `Bearer ${mercadoPagoToken}` },
+      });
+      if (!response.ok) {
+        console.error("Failed to fetch payment details", response.status);
+        return json({ error: "Failed to fetch payment details" }, 500);
+      }
+      paymentData = await response.json();
+    } else {
+      const response = await fetch(`https://api.mercadopago.com/merchant_orders/${resourceId}`, {
+        headers: { Authorization: `Bearer ${mercadoPagoToken}` },
+      });
+      if (!response.ok) {
+        console.error("Failed to fetch merchant order details", response.status);
+        return json({ error: "Failed to fetch merchant order details" }, 500);
+      }
+      const merchantOrder = await response.json();
+      const lastPayment = Array.isArray(merchantOrder.payments) && merchantOrder.payments.length
+        ? merchantOrder.payments[merchantOrder.payments.length - 1]
+        : null;
 
-      if (!mercadoPagoToken) {
-        throw new Error('MERCADO_PAGO_ACCESS_TOKEN not configured');
+      if (!lastPayment?.id) {
+        return json({ success: true, message: "Merchant order without payment" });
       }
 
-      // Get payment details from Mercado Pago API
-      let paymentData: any;
-
-      if (topic === 'payment') {
-        // For payment topic, resourceId is the payment ID
-        const response = await fetch(`https://api.mercadopago.com/v1/payments/${resourceId}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${mercadoPagoToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          console.error('Failed to fetch payment details:', response.statusText);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Failed to fetch payment details' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        paymentData = await response.json();
-      } else if (topic === 'merchant_order') {
-        // For merchant_order topic, resourceId is the merchant order ID
-        const response = await fetch(`https://api.mercadopago.com/merchant_orders/${resourceId}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${mercadoPagoToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          console.error('Failed to fetch merchant order details:', response.statusText);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Failed to fetch merchant order details' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        paymentData = await response.json();
+      const paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${lastPayment.id}`, {
+        headers: { Authorization: `Bearer ${mercadoPagoToken}` },
+      });
+      if (!paymentResponse.ok) {
+        console.error("Failed to fetch merchant order payment details", paymentResponse.status);
+        return json({ error: "Failed to fetch payment details" }, 500);
       }
-
-      console.log('Payment data received:', JSON.stringify(paymentData, null, 2));
-
-      // Extract external reference (our order ID) from payment data
-      let externalReference: string | null = null;
-      let status: string | null = null;
-
-      if (topic === 'payment' && paymentData.external_reference) {
-        externalReference = paymentData.external_reference;
-        status = paymentData.status; // e.g., 'approved', 'pending', 'rejected', 'cancelled'
-      } else if (topic === 'merchant_order' && paymentData.external_reference) {
-        externalReference = paymentData.external_reference;
-        // For merchant orders, check the payment status
-        if (paymentData.payments && paymentData.payments.length > 0) {
-          const lastPayment = paymentData.payments[paymentData.payments.length - 1];
-          status = lastPayment.status;
-        }
-      } else if (paymentData.external_reference) {
-        // fallback if topic not set but we have external_reference
-        externalReference = paymentData.external_reference;
-        status = paymentData.status || null;
-      }
-
-      if (!externalReference) {
-        console.warn('No external reference found in payment data');
-        return new Response(
-          JSON.stringify({ success: true, message: 'No external reference' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-      }
-
-      console.log('Processing order:', externalReference, 'with status:', status);
-
-      // Only update order status if payment is approved
-      if (status === 'approved') {
-        const { data, error } = await supabase
-          .from('orders')
-          .update({
-            payment_status: 'paid',
-            status: 'confirmed', // Change order status to confirmed
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', externalReference);
-
-        if (error) {
-          console.error('Error updating order:', error);
-          return new Response(
-            JSON.stringify({ success: false, error: error.message }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        console.log('Order updated successfully:', externalReference);
-
-        return new Response(
-          JSON.stringify({ success: true, message: 'Order status updated to paid' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-      } else if (status === 'pending') {
-        // Update to pending payment status
-        const { error } = await supabase
-          .from('orders')
-          .update({
-            payment_status: 'pending',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', externalReference);
-
-        if (error) {
-          console.error('Error updating order to pending:', error);
-        }
-
-        console.log('Order payment pending:', externalReference);
-
-        return new Response(
-          JSON.stringify({ success: true, message: 'Order payment pending' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-      } else if (status === 'rejected' || status === 'cancelled') {
-        // Update to failed payment status
-        const { error } = await supabase
-          .from('orders')
-          .update({
-            payment_status: 'failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', externalReference);
-
-        if (error) {
-          console.error('Error updating order to failed:', error);
-        }
-
-        console.log('Order payment failed/rejected:', externalReference);
-
-        return new Response(
-          JSON.stringify({ success: true, message: 'Order payment failed' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ success: true, message: 'Webhook processed' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
+      paymentData = await paymentResponse.json();
     }
 
-    // Unknown topic
-    console.log('Unknown webhook topic:', topic);
-    return new Response(
-      JSON.stringify({ success: true, message: 'Webhook received but not processed' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    const externalReference = paymentData?.external_reference;
+    const status = paymentData?.status;
+    const paymentId = paymentData?.id?.toString?.() || resourceId;
+
+    if (!externalReference) {
+      return json({ success: true, message: "Payment without external reference" });
+    }
+
+    console.log("Processing Mercado Pago webhook", {
+      orderId: externalReference,
+      paymentId,
+      status,
+    });
+
+    if (status === "approved") {
+      const { error } = await supabase.rpc("confirm_paid_order_and_decrement_stock", {
+        _order_id: externalReference,
+        _mercado_pago_payment_id: paymentId,
+      });
+
+      if (error) {
+        console.error("Error confirming paid order and stock", externalReference, error.message);
+        await supabase
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            status: "stock_issue",
+            mercado_pago_payment_id: paymentId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", externalReference);
+
+        return json({ error: error.message }, 500);
+      }
+
+      return json({ success: true, message: "Order paid" });
+    }
+
+    const pendingStatuses = ["pending", "in_process", "authorized"];
+    const failedStatuses = ["rejected", "cancelled", "canceled", "expired"];
+
+    if (pendingStatuses.includes(status)) {
+      await supabase
+        .from("orders")
+        .update({
+          payment_status: "pending",
+          mercado_pago_payment_id: paymentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", externalReference)
+        .neq("payment_status", "paid");
+
+      return json({ success: true, message: "Order payment pending" });
+    }
+
+    if (failedStatuses.includes(status)) {
+      await supabase
+        .from("orders")
+        .update({
+          payment_status: "failed",
+          status: "failed",
+          mercado_pago_payment_id: paymentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", externalReference)
+        .neq("payment_status", "paid");
+
+      return json({ success: true, message: "Order payment failed" });
+    }
+
+    return json({ success: true, message: "Status ignored" });
   } catch (error: any) {
-    console.error('Webhook error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    console.error("Payment webhook error", error?.message || error);
+    return json({ error: error?.message || "Internal server error" }, 500);
   }
 });

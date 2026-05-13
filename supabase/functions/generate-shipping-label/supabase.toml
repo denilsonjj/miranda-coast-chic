@@ -1,2 +1,2 @@
 [functions.generate-shipping-label]
-verify_jwt = false
+verify_jwt = true

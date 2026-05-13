@@ -31,6 +31,9 @@ interface Order {
   shipping_cost: number;
   total: number;
   tracking_code: string | null;
+  shipping_label_url?: string | null;
+  shipping_status?: string | null;
+  melhor_envio_id?: string | null;
   shipping_address: any;
   shipping_service: any;
   order_items: any[];
@@ -38,26 +41,34 @@ interface Order {
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-500",
+  confirmed: "bg-blue-500",
   paid: "bg-blue-500",
   processing: "bg-purple-500",
   shipped: "bg-green-500",
   delivered: "bg-green-700",
   cancelled: "bg-red-500",
+  failed: "bg-red-500",
+  stock_issue: "bg-orange-600",
 };
 
 const statusLabels: Record<string, string> = {
   pending: "Pendente",
+  confirmed: "Confirmado",
   paid: "Pago",
   processing: "Processando",
   shipped: "Enviado",
   delivered: "Entregue",
   cancelled: "Cancelado",
+  failed: "Falhou",
+  stock_issue: "Pago sem estoque",
 };
 
 const paymentStatusLabels: Record<string, string> = {
   pending: "Aguardando",
   approved: "Aprovado",
+  paid: "Pago",
   rejected: "Rejeitado",
+  failed: "Falhou",
 };
 
 export const OrdersTab = () => {
@@ -115,11 +126,10 @@ export const OrdersTab = () => {
   });
 
   const generateLabel = useMutation({
-    mutationFn: async ({ orderId, serviceId }: { orderId: string; serviceId: number }) => {
+    mutationFn: async ({ orderId }: { orderId: string }) => {
       const { data, error } = await supabase.functions.invoke('generate-shipping-label', {
         body: {
           order_id: orderId,
-          service_id: serviceId,
         },
       });
       if (error) throw error;
@@ -134,6 +144,9 @@ export const OrdersTab = () => {
       }
       if (data.tracking_code) {
         toast.success(`Código de rastreio: ${data.tracking_code}`);
+      }
+      if (data.draft) {
+        toast.warning(data.message || 'Etiqueta criada como rascunho no Melhor Envio.');
       }
       setLabelDialog(false);
     },
@@ -197,6 +210,8 @@ export const OrdersTab = () => {
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="pending">Pendente</SelectItem>
+              <SelectItem value="confirmed">Confirmado</SelectItem>
+              <SelectItem value="stock_issue">Pago sem estoque</SelectItem>
               <SelectItem value="paid">Pago</SelectItem>
               <SelectItem value="processing">Processando</SelectItem>
               <SelectItem value="shipped">Enviado</SelectItem>
@@ -250,7 +265,7 @@ export const OrdersTab = () => {
                       <Eye className="h-4 w-4 mr-1" />
                       Detalhes
                     </Button>
-                    {(['approved', 'paid'].includes(order.payment_status)) && !order.tracking_code && (
+                    {(['approved', 'paid'].includes(order.payment_status)) && !order.tracking_code && !order.shipping_service?.pickup && order.shipping_service?.id !== 'pickup' && (
                       <Button size="sm" onClick={() => openLabelDialog(order)}>
                         <Printer className="h-4 w-4 mr-1" />
                         Etiqueta
@@ -281,6 +296,8 @@ export const OrdersTab = () => {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="confirmed">Confirmado</SelectItem>
+                        <SelectItem value="stock_issue">Pago sem estoque</SelectItem>
                         <SelectItem value="paid">Pago</SelectItem>
                         <SelectItem value="processing">Processando</SelectItem>
                         <SelectItem value="shipped">Enviado</SelectItem>
@@ -402,7 +419,6 @@ export const OrdersTab = () => {
                       className="w-full"
                       onClick={() => generateLabel.mutate({
                         orderId: selectedOrder.id,
-                        serviceId: Number(selectedOrder.shipping_service?.id || selectedOrder.shipping_service?.service_id || 0),
                       })}
                       disabled={generateLabel.isPending}
                     >

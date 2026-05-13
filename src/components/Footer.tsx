@@ -83,7 +83,7 @@ const Footer = () => {
                 <Facebook className="h-5 w-5" />
               </a>
               <a
-                href="mailto:contato@mirandacosta.com"
+                href="mailto:mirandacoastr@gmail.com"
                 className="text-muted-foreground hover:text-primary transition-smooth"
                 aria-label="Email"
               >

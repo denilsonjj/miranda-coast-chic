@@ -1,10 +1,10 @@
 project_id = "emdhiktlzpmqkeeobusl"
 
 [functions.calculate-shipping]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-payment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-shipping-label]
-verify_jwt = false
+verify_jwt = true

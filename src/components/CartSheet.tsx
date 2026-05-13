@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ShoppingBag, Plus, Minus, Trash2, Loader2 } from 'lucide-react';
@@ -11,8 +12,14 @@ interface CartSheetProps {
 
 const CartSheet = ({ children }: CartSheetProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { cartItems, isLoading, updateQuantity, removeFromCart, cartTotal, cartCount } = useCart();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, location.search]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -22,11 +29,17 @@ const CartSheet = ({ children }: CartSheetProps) => {
   };
 
   const handleCheckout = () => {
+    setOpen(false);
     navigate('/checkout');
   };
 
+  const handleLogin = () => {
+    setOpen(false);
+    navigate('/auth');
+  };
+
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         {children || (
           <Button variant="ghost" size="icon" className="relative">
@@ -48,7 +61,7 @@ const CartSheet = ({ children }: CartSheetProps) => {
           <div className="flex flex-col items-center justify-center h-[60vh] text-center">
             <ShoppingBag className="h-16 w-16 text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">Faça login para ver seu carrinho</p>
-            <Button onClick={() => navigate('/auth')}>Entrar</Button>
+            <Button onClick={handleLogin}>Entrar</Button>
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center h-[60vh]">

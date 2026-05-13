@@ -56,6 +56,32 @@ const MERCADO_PAGO_WEBHOOK =
   `${window.location.origin}/api/webhook/mercado-pago`;
 const MERCADO_PAGO_PUBLIC_KEY = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY || "";
 
+const LOCAL_PICKUP_OPTION: ShippingOption = {
+  id: "pickup",
+  name: "Retirar na loja",
+  company: "Miranda Coast",
+  price: 0,
+  delivery_time: 0,
+  delivery_range: { min: 0, max: 0 },
+  pickup: true,
+  address: {
+    name: "Miranda Coast",
+    street: "Rua Licurana",
+    number: "806",
+    district: "Tabuleiro",
+    city: "Camboriu",
+    state: "SC",
+    postal_code: ORIGIN_CEP,
+    phone: "",
+  },
+};
+
+const ensurePickupOption = (options: ShippingOption[] | undefined | null) => {
+  const validOptions = Array.isArray(options) ? options.filter(Boolean) : [];
+  const deliveryOptions = validOptions.filter((option) => option.id !== LOCAL_PICKUP_OPTION.id && !option.pickup);
+  return [LOCAL_PICKUP_OPTION, ...deliveryOptions];
+};
+
 declare global {
   interface Window {
     MercadoPago?: any;
@@ -277,20 +303,25 @@ const Checkout = () => {
 
       if (error) throw error;
 
-      if (data.options && data.options.length > 0) {
-        setShippingOptions(data.options);
-        const firstPaid = data.options.find((opt: any) => !opt.pickup);
-        setSelectedShipping(firstPaid || data.options[0]);
-        setStep(2);
-        return true;
-      } else {
-        toast.error("Nenhuma opção de frete encontrada para este CEP");
-        return false;
+      const options = ensurePickupOption(data?.options);
+      setShippingOptions(options);
+      setSelectedShipping(options[0]);
+      setStep(2);
+
+      if (!data?.options?.some((option: ShippingOption) => !option.pickup)) {
+        toast.warning("Nao encontramos entrega para este CEP agora, mas a retirada na loja esta disponivel.");
       }
+
+      return true;
+
     } catch (error: any) {
       console.error("Shipping calculation error:", error);
-      toast.error("Erro ao calcular frete. Tente novamente.");
-      return false;
+      const options = ensurePickupOption([]);
+      setShippingOptions(options);
+      setSelectedShipping(options[0]);
+      setStep(2);
+      toast.warning("Nao foi possivel calcular entrega agora, mas a retirada na loja esta disponivel.");
+      return true;
     } finally {
       setLoadingShipping(false);
     }
@@ -587,91 +618,9 @@ const Checkout = () => {
         return;
       }
 
-      // Atualiza estoque de variantes e total do produto
-      for (const item of cartItems) {
-        const productInfo = stockMap[item.product_id];
-        if (!productInfo) continue;
+      // O estoque e baixado no backend quando o Mercado Pago confirma o pagamento.
+      // Isso evita derrubar estoque por Pix abandonado e impede desconto duplicado.
 
-        const variants = Array.isArray(productInfo.product_variants) ? productInfo.product_variants : [];
-        const hasVariants = variants.length > 0;
-
-        if (hasVariants) {
-          const variantMatch = variants.find(
-            (v: any) =>
-              (v.size ?? null) === (item.size ?? null) &&
-              (v.color ?? null) === (item.color ?? null)
-          );
-
-          if (variantMatch) {
-            const currentVariantStock = typeof variantMatch.stock === "number" ? variantMatch.stock : 0;
-            const newVariantStock = Math.max(0, currentVariantStock - item.quantity);
-            variantMatch.stock = newVariantStock;
-          }
-        } else {
-          const currentStock = typeof productInfo.stock === "number" ? productInfo.stock : 0;
-          const newStock = Math.max(0, currentStock - item.quantity);
-          productInfo.stock = newStock;
-        }
-      }
-
-      const variantUpserts: any[] = [];
-      const productStockUpdates: { id: string; stock: number }[] = [];
-
-      Object.values(stockMap).forEach((productInfo: any) => {
-        const variants = Array.isArray(productInfo.product_variants) ? productInfo.product_variants : [];
-        if (variants.length > 0) {
-          variantUpserts.push(
-            ...variants.map((v: any) => ({
-              id: v.id,
-              product_id: productInfo.id,
-              color: v.color ?? null,
-              size: v.size ?? null,
-              stock: typeof v.stock === "number" ? v.stock : 0,
-            }))
-          );
-          const totalStock = variants.reduce(
-            (sum: number, v: any) => sum + (typeof v.stock === "number" ? v.stock : 0),
-            0
-          );
-          productStockUpdates.push({ id: productInfo.id, stock: totalStock });
-        } else {
-          productStockUpdates.push({
-            id: productInfo.id,
-            stock: typeof productInfo.stock === "number" ? productInfo.stock : 0,
-          });
-        }
-      });
-
-      if (variantUpserts.length > 0) {
-        const { error: variantUpdateError } = await supabase
-          .from("product_variants")
-          .upsert(variantUpserts);
-
-        if (variantUpdateError) {
-          console.error("Variant stock update error:", variantUpdateError);
-          toast.error("Pedido criado, mas houve erro ao atualizar o estoque das variações. Entre em contato.");
-          setIsLoading(false);
-          setIsPaying(false);
-          return;
-        }
-      }
-
-      if (productStockUpdates.length > 0) {
-        const updates = await Promise.all(
-          productStockUpdates.map((p) =>
-            supabase.from("products").update({ stock: p.stock }).eq("id", p.id)
-          )
-        );
-
-        const stockUpdateError = updates.find((u) => u.error);
-        if (stockUpdateError?.error) {
-          console.error("Stock update error:", stockUpdateError.error);
-          toast.error("Pedido criado, mas houve erro ao atualizar o estoque. Entre em contato.");
-          setIsLoading(false);
-          setIsPaying(false);
-          return;
-        }
-      }
 
       let paymentMethodId =
         paymentMethod === "pix" ? "pix" : paymentMethod === "boleto" ? "bolbradesco" : undefined;
@@ -971,8 +920,11 @@ const Checkout = () => {
                               {option.company} - {option.name}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              Entrega em {option.delivery_range?.min || option.delivery_time} -{" "}
-                              {option.delivery_range?.max || option.delivery_time} dias úteis
+                              {option.pickup
+                                ? "Retirada gratuita no local"
+                                : `Entrega em ${option.delivery_range?.min || option.delivery_time} - ${
+                                    option.delivery_range?.max || option.delivery_time
+                                  } dias uteis`}
                             </p>
                           </div>
                           <p className="font-semibold text-primary whitespace-nowrap ml-2">

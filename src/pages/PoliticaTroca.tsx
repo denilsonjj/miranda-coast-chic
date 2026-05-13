@@ -20,12 +20,13 @@ const PoliticaTroca = () => {
             <CardContent className="p-8">
               <h2 className="text-2xl font-serif mb-4">Prazo para Troca ou Devolução</h2>
               <p className="text-muted-foreground mb-4">
-                Você tem até <strong>30 dias corridos</strong> após o recebimento do produto para
+                Você tem até <strong>7 dias corridos</strong> após o recebimento do produto para
                 solicitar troca ou devolução.
               </p>
               <p className="text-muted-foreground">
-                Para produtos com defeito de fabricação, o prazo é de até <strong>90 dias</strong>{" "}
-                conforme o Código de Defesa do Consumidor.
+                Para produtos com defeito de fabricação, entre em contato em até{" "}
+                <strong>7 dias corridos</strong> após o recebimento para que possamos avaliar a
+                situação e orientar os próximos passos.
               </p>
             </CardContent>
           </Card>
@@ -65,7 +66,7 @@ const PoliticaTroca = () => {
                   <div>
                     <strong>Entre em contato</strong>
                     <p className="text-sm mt-1">
-                      Envie um e-mail para contato@mirandacosta.com com seu número de pedido e o
+                      Envie um e-mail para mirandacoastr@gmail.com com seu número de pedido e o
                       motivo da troca/devolução
                     </p>
                   </div>

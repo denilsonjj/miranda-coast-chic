@@ -68,7 +68,7 @@ const Rastreamento = () => {
               <CardContent className="p-6">
                 <h3 className="text-lg font-serif mb-2">Dúvidas sobre o Rastreamento?</h3>
                 <p className="text-muted-foreground text-sm">
-                  Entre em contato conosco pelo e-mail contato@mirandacosta.com ou pela nossa
+                  Entre em contato conosco pelo e-mail mirandacoastr@gmail.com ou pela nossa
                   página de contato.
                 </p>
               </CardContent>

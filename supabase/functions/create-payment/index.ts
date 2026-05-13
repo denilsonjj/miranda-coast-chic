@@ -1,14 +1,29 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
+
+const money = (value: unknown) => Math.round(Number(value || 0) * 100) / 100;
+const cleanDigits = (value: unknown) => String(value || "").replace(/\D/g, "");
+const isUuid = (value: unknown) =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: corsHeaders });
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
   }
 
   try {
@@ -16,164 +31,175 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!accessToken) {
-      console.error("MERCADO_PAGO_ACCESS_TOKEN not configured");
-      return new Response(
-        JSON.stringify({
-          error: "Payment gateway not configured: defina MERCADO_PAGO_ACCESS_TOKEN nos secrets",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-      );
+    if (!accessToken || !supabaseUrl || !supabaseServiceKey) {
+      return json({ error: "Payment gateway not configured" }, 500);
+    }
+
+    const authHeader = req.headers.get("authorization") || "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!jwt) {
+      return json({ error: "Login required" }, 401);
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: authData, error: authError } = await supabase.auth.getUser(jwt);
+    if (authError || !authData.user) {
+      return json({ error: "Invalid session" }, 401);
     }
 
     const body = await req.json();
-    console.log("Request body:", JSON.stringify(body));
-
     const {
-      items,
-      payer,
       external_reference,
-      back_urls,
+      payer = {},
+      back_urls = {},
       payment_method_id,
       token,
       installments,
-      shipping_cost,
-    } = body;
+    } = body || {};
 
-    const payerName: string = payer?.name || "Cliente";
-    const nameParts = payerName.trim().split(" ");
-    const firstName = payer?.first_name || nameParts.shift() || payerName;
-    const lastName = payer?.last_name || nameParts.join(" ") || payerName;
+    if (!isUuid(external_reference)) {
+      return json({ error: "Pedido invalido" }, 400);
+    }
 
-    const shippingAmount = Number(shipping_cost) > 0 ? Number(shipping_cost) : 0;
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("*, order_items(*)")
+      .eq("id", external_reference)
+      .single();
+
+    if (orderError || !order) {
+      return json({ error: "Pedido nao encontrado" }, 404);
+    }
+
+    if (order.user_id !== authData.user.id) {
+      return json({ error: "Pedido nao pertence ao usuario autenticado" }, 403);
+    }
+
+    if (order.payment_status === "paid") {
+      return json({ error: "Este pedido ja foi pago" }, 409);
+    }
+
+    const orderItems = Array.isArray(order.order_items) ? order.order_items : [];
+    if (orderItems.length === 0) {
+      return json({ error: "Pedido sem itens" }, 400);
+    }
+
+    const invalidItem = orderItems.find(
+      (item: any) =>
+        !item.product_name ||
+        Number(item.quantity) <= 0 ||
+        item.price === undefined ||
+        Number(item.price) < 0,
+    );
+    if (invalidItem) {
+      return json({ error: "Pedido contem itens invalidos" }, 400);
+    }
+
+    const itemsTotal = money(
+      orderItems.reduce(
+        (sum: number, item: any) => sum + money(item.price) * Number(item.quantity || 0),
+        0,
+      ),
+    );
+    const shippingCost = money(order.shipping_cost);
+    const expectedTotal = money(itemsTotal + shippingCost);
+    const storedTotal = money(order.total);
+
+    if (Math.abs(expectedTotal - storedTotal) > 0.02) {
+      console.error("Order total mismatch", {
+        orderId: order.id,
+        expectedTotal,
+        storedTotal,
+      });
+      return json({ error: "Total do pedido divergente. Refaça o checkout." }, 409);
+    }
+
     const itemsWithShipping = [
-      ...items,
-      ...(shippingAmount > 0
-        ? [
-            {
-              id: "shipping",
-              title: "Frete",
-              description: "Frete",
-              quantity: 1,
-              unit_price: Math.round(Number(shippingAmount) * 100) / 100,
-            },
-          ]
+      ...orderItems.map((item: any) => ({
+        id: item.product_id || item.id,
+        title: item.product_name,
+        description: [item.size ? `Tam: ${item.size}` : null, item.color ? `Cor: ${item.color}` : null]
+          .filter(Boolean)
+          .join(" | ") || item.product_name,
+        picture_url: item.product_image || undefined,
+        quantity: Number(item.quantity),
+        unit_price: money(item.price),
+      })),
+      ...(shippingCost > 0
+        ? [{
+            id: "shipping",
+            title: "Frete",
+            description: order.shipping_service?.name || "Frete",
+            quantity: 1,
+            unit_price: shippingCost,
+          }]
         : []),
     ];
 
-    const isPreferenceFlow = !payment_method_id;
+    const publicSiteUrl = Deno.env.get("PUBLIC_SITE_URL") || "";
+    const supabaseFunctionsUrl = supabaseUrl.replace(".supabase.co", ".functions.supabase.co");
+    const notificationUrl =
+      typeof back_urls?.notification === "string" && back_urls.notification.trim()
+        ? back_urls.notification.trim()
+        : `${supabaseFunctionsUrl}/payment-webhook`;
+    const baseOrderUrl =
+      publicSiteUrl ||
+      (typeof back_urls?.success === "string" && back_urls.success.includes("/pedido/")
+        ? back_urls.success.split("/pedido/")[0]
+        : "");
 
-    const isBoleto = payment_method_id?.toLowerCase?.().includes("bol");
-    const isCard = !!payment_method_id && !isBoleto && payment_method_id?.toLowerCase?.() !== "pix";
+    const paymentMethod = String(payment_method_id || "").toLowerCase();
+    const isTransparentPayment = Boolean(paymentMethod);
+    const isPix = paymentMethod === "pix";
+    const isBoleto = paymentMethod.includes("bol");
+    const isCard = isTransparentPayment && !isPix && !isBoleto;
 
-    const payerAddress = payer?.address || {};
-    const boletoAddress =
-      payerAddress && {
-        zip_code: (payerAddress.zip_code || payerAddress.postal_code || "").toString().replace(/\D/g, ""),
-        street_name: payerAddress.street_name || payerAddress.street || "",
-        street_number: (payerAddress.street_number || payerAddress.number || "").toString(),
-        neighborhood: payerAddress.neighborhood || "",
-        city: payerAddress.city || "",
-        federal_unit: payerAddress.federal_unit || payerAddress.state || "",
-      };
+    const payerName = String(payer?.name || authData.user.user_metadata?.full_name || "Cliente").trim();
+    const nameParts = payerName.split(/\s+/).filter(Boolean);
+    const firstName = String(payer?.first_name || nameParts.shift() || payerName || "Cliente");
+    const lastName = String(payer?.last_name || nameParts.join(" ") || "Cliente");
+    const documentNumber = cleanDigits(payer?.document || order.shipping_address?.document);
+    const documentType = String(payer?.document_type || (documentNumber.length > 11 ? "CNPJ" : "CPF"));
 
     if (isCard && !token) {
-      return new Response(
-        JSON.stringify({ error: "Cartão: token não recebido do frontend. Gere o token antes de pagar." }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-      );
+      return json({ error: "Cartao: token nao recebido do frontend" }, 400);
     }
 
-    if (
-      isBoleto &&
-      (!boletoAddress ||
-        !boletoAddress.zip_code ||
-        !boletoAddress.street_name ||
-        !boletoAddress.city ||
-        !boletoAddress.federal_unit)
-    ) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "Boleto: endereço do pagador incompleto. Envie zip_code, street_name, street_number, city, federal_unit.",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-      );
+    if ((isPix || isBoleto || isCard) && (!payer?.email || !documentNumber)) {
+      return json({ error: "Dados do pagador incompletos" }, 400);
     }
 
-    if (
-      !itemsWithShipping ||
-      !Array.isArray(itemsWithShipping) ||
-      itemsWithShipping.length === 0 ||
-      !payer ||
-      !external_reference
-    ) {
-      return new Response(
-        JSON.stringify({
-          error: "Missing required fields: items (array), payer, external_reference",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-      );
-    }
+    const idempotencyKey = [
+      "order",
+      order.id,
+      isTransparentPayment ? paymentMethod : "preference",
+      String(Math.round(storedTotal * 100)),
+    ].join("-");
 
-    const invalidItem = itemsWithShipping.find(
-      (item: any) =>
-        !item.title ||
-        !item.quantity ||
-        Number(item.quantity) <= 0 ||
-        item.unit_price === undefined ||
-        isNaN(Number(item.unit_price)),
-    );
-    if (invalidItem) {
-      return new Response(
-        JSON.stringify({
-          error: "Invalid item payload: title, quantity (>0) e unit_price numérico são obrigatórios",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-      );
-    }
-
-    const requestOrigin = req.headers.get("origin") || "";
-    const requestUrlOrigin = new URL(req.url).origin || "";
-    const envBase = Deno.env.get("PUBLIC_SITE_URL") || "";
-    const baseUrl =
-      (back_urls?.success && back_urls.success.trim()) ||
-      (back_urls?.failure && back_urls.failure.trim()) ||
-      (back_urls?.pending && back_urls.pending.trim()) ||
-      envBase ||
-      requestOrigin ||
-      requestUrlOrigin ||
-      "https://example.com";
-
-    const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `${external_reference}-${Date.now()}`;
-
-    if (isPreferenceFlow) {
-      console.log("Creating payment preference for:", external_reference);
-      console.log("Items:", JSON.stringify(itemsWithShipping));
-
-      const preferenceData = {
-        items: itemsWithShipping.map((item: any) => ({
-          id: item.id || item.product_name,
-          title: item.title || item.product_name,
-          description: item.description || item.title || "Produto",
+    if (!isTransparentPayment) {
+      const preferencePayload = {
+        items: itemsWithShipping.map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
           picture_url: item.picture_url,
           quantity: item.quantity,
           currency_id: "BRL",
-          unit_price: parseFloat(item.unit_price),
+          unit_price: item.unit_price,
         })),
         payer: {
-          email: payer.email || "",
-          name: payerName || "Cliente",
+          email: payer?.email || authData.user.email || "",
+          name: payerName,
         },
         back_urls: {
-          success: back_urls?.success?.trim() || `${baseUrl}/pedido/${external_reference}`,
-          failure: back_urls?.failure?.trim() || `${baseUrl}/pedido/${external_reference}`,
-          pending: back_urls?.pending?.trim() || `${baseUrl}/pedido/${external_reference}`,
+          success: back_urls?.success || `${baseOrderUrl}/pedido/${order.id}`,
+          failure: back_urls?.failure || `${baseOrderUrl}/pedido/${order.id}`,
+          pending: back_urls?.pending || `${baseOrderUrl}/pedido/${order.id}`,
         },
         auto_return: "approved",
-        external_reference,
+        external_reference: order.id,
         statement_descriptor: "MIRANDA COAST",
-        notification_url: back_urls?.notification || baseUrl,
+        notification_url: notificationUrl,
       };
 
       const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
@@ -183,186 +209,145 @@ serve(async (req) => {
           Authorization: `Bearer ${accessToken}`,
           "X-Idempotency-Key": idempotencyKey,
         },
-        body: JSON.stringify(preferenceData),
+        body: JSON.stringify(preferencePayload),
       });
 
       const data = await response.json();
-
       if (!response.ok) {
-        console.error("Mercado Pago API error:", JSON.stringify(data));
-        return new Response(
-          JSON.stringify({
-            error: data.message || "Failed to create payment preference",
-            details: data,
-            status: response.status,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: response.status },
-        );
+        console.error("Mercado Pago preference error", response.status, data?.message || data?.error);
+        return json({
+          error: data.message || "Failed to create payment preference",
+          status: response.status,
+        }, response.status);
       }
 
-      console.log("Payment preference created:", data.id);
+      return json({
+        id: data.id,
+        init_point: data.init_point,
+        sandbox_init_point: data.sandbox_init_point,
+      });
+    }
 
-      return new Response(
-        JSON.stringify({
-          id: data.id,
-          init_point: data.init_point,
-          sandbox_init_point: data.sandbox_init_point,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
-      );
+    const payerAddress = payer?.address || order.shipping_address?.address || {};
+    const paymentPayload: Record<string, unknown> = {
+      transaction_amount: storedTotal,
+      description: `Pedido ${order.id.slice(0, 8)}`,
+      payment_method_id,
+      payer: {
+        email: payer.email || authData.user.email || "",
+        first_name: firstName,
+        last_name: lastName,
+        identification: {
+          type: documentType,
+          number: documentNumber,
+        },
+        ...(isBoleto
+          ? {
+              address: {
+                zip_code: cleanDigits(payerAddress.zip_code || payerAddress.postal_code || order.shipping_address?.cep),
+                street_name: payerAddress.street_name || payerAddress.street || order.shipping_address?.street || "",
+                street_number: String(payerAddress.street_number || payerAddress.number || order.shipping_address?.number || ""),
+                neighborhood: payerAddress.neighborhood || order.shipping_address?.neighborhood || "",
+                city: payerAddress.city || order.shipping_address?.city || "",
+                federal_unit: payerAddress.federal_unit || payerAddress.state || order.shipping_address?.state || "",
+              },
+            }
+          : {}),
+      },
+      external_reference: order.id,
+      statement_descriptor: "MIRANDA COAST",
+      notification_url: notificationUrl,
+      additional_info: {
+        items: itemsWithShipping.map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          picture_url: item.picture_url,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        })),
+      },
+    };
+
+    if (token) paymentPayload.token = token;
+    if (installments) paymentPayload.installments = Number(installments) || 1;
+
+    const response = await fetch("https://api.mercadopago.com/v1/payments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "X-Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(paymentPayload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error("Mercado Pago payment error", response.status, data?.message || data?.error);
+      return json({
+        error: data.message || "Failed to create payment",
+        status: response.status,
+        status_detail: data.status_detail,
+      }, response.status);
+    }
+
+    const mercadoPagoPaymentId = data.id?.toString?.() || null;
+    if (data.status === "approved") {
+      const { error: confirmError } = await supabase.rpc("confirm_paid_order_and_decrement_stock", {
+        _order_id: order.id,
+        _mercado_pago_payment_id: mercadoPagoPaymentId,
+      });
+
+      if (confirmError) {
+        console.error("Paid order stock confirmation failed", order.id, confirmError.message);
+        await supabase
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            status: "stock_issue",
+            mercado_pago_payment_id: mercadoPagoPaymentId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", order.id);
+
+        return json({
+          error: "Pagamento aprovado, mas nao foi possivel confirmar estoque automaticamente.",
+          details: confirmError.message,
+        }, 409);
+      }
     } else {
-      const transactionAmount = itemsWithShipping.reduce(
-        (sum: number, item: any) => sum + Number(item.unit_price) * Number(item.quantity),
-        0,
-      );
-      const normalizedTransactionAmount = Math.round(transactionAmount * 100) / 100;
-      console.log("Items with shipping:", JSON.stringify(itemsWithShipping));
-      console.log("Calculated transaction_amount:", normalizedTransactionAmount);
+      const failedStatuses = ["cancelled", "canceled", "rejected", "expired"];
+      await supabase
+        .from("orders")
+        .update({
+          payment_status: failedStatuses.includes(data.status) ? "failed" : "pending",
+          status: failedStatuses.includes(data.status) ? "failed" : "pending",
+          mercado_pago_payment_id: mercadoPagoPaymentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
 
-      console.log("Creating direct payment for:", external_reference, "method:", payment_method_id);
-
-      const paymentPayload: any = {
-        transaction_amount: normalizedTransactionAmount,
-        description: items?.[0]?.title || "Pedido",
-        payment_method_id,
-        payer: {
-          email: payer.email || "",
-          first_name: firstName,
-          last_name: lastName,
-          identification: {
-            type: payer.document_type || "CPF",
-            number: payer.document || "",
-          },
-          ...(isBoleto && boletoAddress
-            ? {
-                address: boletoAddress,
-              }
-            : {}),
-        },
-        external_reference,
-        statement_descriptor: payer.statement_descriptor || "MIRANDA COAST",
-        notification_url: back_urls?.notification?.trim() || baseUrl,
-        additional_info: {
-          items: itemsWithShipping.map((item: any) => ({
-            id: item.id || item.product_name,
-            title: item.title || item.product_name,
-            description: item.description || item.title || "Produto",
-            picture_url: item.picture_url,
-            quantity: item.quantity,
-            unit_price: Math.round(Number(item.unit_price) * 100) / 100,
-          })),
-        },
-      };
-
-      if (token) {
-        paymentPayload.token = token;
-      }
-
-      if (installments) {
-        paymentPayload.installments = Number(installments);
-      }
-
-      const response = await fetch("https://api.mercadopago.com/v1/payments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-          "X-Idempotency-Key": idempotencyKey,
-        },
-        body: JSON.stringify(paymentPayload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("Mercado Pago API error:", JSON.stringify(data));
-        return new Response(
-          JSON.stringify({
-            error: data.message || "Failed to create payment",
-            details: data,
-            status: response.status,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: response.status },
-        );
-      }
-
-      console.log(
-        "Payment created:",
-        data.id,
-        "status:",
-        data.status,
-        "status_detail:",
-        data.status_detail,
-      );
-
-      if (data.status === "rejected") {
-        console.error(
-          "Payment rejected by MP:",
-          JSON.stringify({
-            id: data.id,
-            status: data.status,
-            status_detail: data.status_detail,
-            cause: data.cause,
-          }),
-        );
-
-        return new Response(
-          JSON.stringify({
-            error: "Pagamento rejeitado pelo Mercado Pago",
-            status: data.status,
-            status_detail: data.status_detail,
-            details: data,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
-        );
-      }
-
-      if (supabaseUrl && supabaseServiceKey) {
-        try {
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
-          let payment_status = "pending";
-          let status = "pending";
-
-          if (data.status === "approved") {
-            payment_status = "paid";
-            status = "confirmed";
-          } else if (data.status === "cancelled") {
-            payment_status = "failed";
-            status = "failed";
-          }
-
-          await supabase
-            .from("orders")
-            .update({
-              payment_status,
-              status,
-              mercado_pago_payment_id: data.id?.toString?.() || null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", external_reference);
-        } catch (err) {
-          console.error("Error updating order status after payment:", err);
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          id: data.id,
+      if (failedStatuses.includes(data.status)) {
+        return json({
+          error: "Pagamento rejeitado pelo Mercado Pago",
           status: data.status,
           status_detail: data.status_detail,
-          point_of_interaction: data.point_of_interaction,
-          qr_code: data.point_of_interaction?.transaction_data?.qr_code || null,
-          qr_code_base64: data.point_of_interaction?.transaction_data?.qr_code_base64 || null,
-          ticket_url: data.point_of_interaction?.transaction_data?.ticket_url || null,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
-      );
+        }, 400);
+      }
     }
-  } catch (error: any) {
-    console.error("Error creating payment:", error);
-    return new Response(JSON.stringify({ error: error.message || "Internal server error" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
+
+    return json({
+      id: data.id,
+      status: data.status,
+      status_detail: data.status_detail,
+      point_of_interaction: data.point_of_interaction,
+      qr_code: data.point_of_interaction?.transaction_data?.qr_code || null,
+      qr_code_base64: data.point_of_interaction?.transaction_data?.qr_code_base64 || null,
+      ticket_url: data.point_of_interaction?.transaction_data?.ticket_url || null,
     });
+  } catch (error: any) {
+    console.error("Error creating payment", error?.message || error);
+    return json({ error: error?.message || "Internal server error" }, 500);
   }
 });

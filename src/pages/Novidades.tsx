@@ -51,47 +51,66 @@ const Novidades = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {products.map((product: any) => (
-              <Card
-                key={product.id}
-                className="group overflow-hidden border-none shadow-medium hover:shadow-large transition-smooth cursor-pointer"
-                onClick={() => navigate(`/produto/${product.id}`)}
-              >
-                <div className="relative aspect-[3/4] overflow-hidden">
-                  {product.images?.[0] ? (
-                    <img
-                      src={product.images[0]}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-muted">
-                      <ShoppingBag className="h-10 w-10 text-muted-foreground" />
+            {products.map((product: any) => {
+              const hasDiscount = product.original_price && product.original_price > product.price;
+              const discountPercentage = hasDiscount
+                ? Math.round((1 - product.price / product.original_price) * 100)
+                : 0;
+
+              return (
+                <Card
+                  key={product.id}
+                  className="group overflow-hidden border-none shadow-medium hover:shadow-large transition-smooth cursor-pointer"
+                  onClick={() => navigate(`/produto/${product.id}`)}
+                >
+                  <div className="relative aspect-[3/4] overflow-hidden">
+                    {product.images?.[0] ? (
+                      <img
+                        src={product.images[0]}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-smooth"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <ShoppingBag className="h-10 w-10 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="absolute top-4 left-4 flex flex-col gap-2">
+                      <span className="bg-primary text-primary-foreground px-3 py-1 text-sm rounded-full">
+                        Novo
+                      </span>
+                      {hasDiscount && (
+                        <span className="bg-destructive text-destructive-foreground px-3 py-1 text-sm rounded-full">
+                          {discountPercentage}% OFF
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <span className="absolute top-4 left-4 bg-primary text-primary-foreground px-3 py-1 text-sm rounded-full">
-                    Novo
-                  </span>
-                </div>
+                  </div>
 
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-serif mb-2 line-clamp-2">{product.name}</h3>
-                  <p className="text-lg font-medium text-primary mb-4">
-                    {formatPrice(product.price)}
-                  </p>
+                  <CardContent className="p-6">
+                    <h3 className="text-xl font-serif mb-2 line-clamp-2">{product.name}</h3>
+                    <div className="flex items-baseline gap-2 mb-4">
+                      <span className="text-lg font-medium text-primary">{formatPrice(product.price)}</span>
+                      {hasDiscount && (
+                        <span className="text-sm text-muted-foreground line-through">
+                          {formatPrice(product.original_price)}
+                        </span>
+                      )}
+                    </div>
 
-                  <Button
-                    className="w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/produto/${product.id}`);
-                    }}
-                  >
-                    Ver Detalhes
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    <Button
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/produto/${product.id}`);
+                      }}
+                    >
+                      Ver Detalhes
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

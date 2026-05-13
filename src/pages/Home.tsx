@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Waves, Heart, Sparkles, ChevronLeft, ChevronRight, ShoppingBag, Loader2, Megaphone } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import heroImage from "@/assets/hero-beach.jpg";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +15,7 @@ const Home = () => {
   const { user } = useAuth();
   const { addToCart } = useCart();
 
-  const { data: heroSettings } = useQuery({
+  const { data: heroSettings, isLoading: heroLoading } = useQuery({
     queryKey: ['hero-settings'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -31,7 +30,7 @@ const Home = () => {
     },
   });
 
-  const currentHeroImage = heroSettings?.image_url || heroImage;
+  const currentHeroImage = heroSettings?.image_url || "";
   const heroTitle = heroSettings?.title || "Descubra seu estilo";
   const heroSubtitle = heroSettings?.subtitle || "Moda feminina delicada e moderna, inspirada pela beleza do litoral";
   const heroCtaText = heroSettings?.cta_text || "Ver Novidades";
@@ -142,10 +141,17 @@ const Home = () => {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="relative h-[85vh] flex items-center justify-center overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${currentHeroImage})` }}
-        >
+        <div className="absolute inset-0 bg-muted">
+          {currentHeroImage ? (
+            <img
+              src={currentHeroImage}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/20 to-background/90" />
         </div>
 
