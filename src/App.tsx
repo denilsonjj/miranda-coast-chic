@@ -34,6 +34,16 @@ const PageLoader = () => (
   </div>
 );
 
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
+
+  return null;
+};
+
 const SupabaseAuthRedirectHandler = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -76,6 +86,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollToTop />
           <SupabaseAuthRedirectHandler />
           <div className="flex flex-col min-h-screen">
             <Navbar />
