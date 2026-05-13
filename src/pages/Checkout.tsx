@@ -43,6 +43,20 @@ interface Address {
   document: string;
 }
 
+interface CheckoutSummary {
+  items: {
+    id: string;
+    name: string;
+    image: string | null;
+    quantity: number;
+    amount: number;
+  }[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  total: number;
+}
+
 type PaymentMethod = "pix" | "card" | "boleto";
 
 const ORIGIN_CEP = import.meta.env.VITE_ORIGIN_CEP || "88348225";
@@ -126,6 +140,7 @@ const Checkout = () => {
   const redirectTimerRef = useRef<number | null>(null);
   const [mpScriptLoaded, setMpScriptLoaded] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [checkoutSummary, setCheckoutSummary] = useState<CheckoutSummary | null>(null);
 
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
@@ -140,6 +155,26 @@ const Checkout = () => {
     () => discountedSubtotal + (selectedShipping?.price || 0),
     [discountedSubtotal, selectedShipping]
   );
+
+  const liveSummary = useMemo<CheckoutSummary>(
+    () => ({
+      items: cartItems.map((item) => ({
+        id: item.id,
+        name: item.product.name,
+        image: item.product.images?.[0] || null,
+        quantity: item.quantity,
+        amount: item.product.price * item.quantity,
+      })),
+      subtotal: cartTotal,
+      discount: couponDiscount,
+      shipping: selectedShipping?.price || 0,
+      total,
+    }),
+    [cartItems, cartTotal, couponDiscount, selectedShipping, total],
+  );
+
+  const summary = checkoutSummary || liveSummary;
+  const summaryLocked = Boolean(checkoutSummary || paymentResult);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -514,6 +549,7 @@ const Checkout = () => {
     setIsLoading(true);
     setIsPaying(true);
     setPaymentResult(null);
+    paymentHandledRef.current = false;
 
     try {
       if (cartItems.length === 0) {
@@ -598,6 +634,19 @@ const Checkout = () => {
       }
 
       const orderTotal = Math.max(0, discountedSubtotal) + (selectedShipping?.price || 0);
+      const orderSummary: CheckoutSummary = {
+        items: cartItems.map((item) => ({
+          id: item.id,
+          name: item.product.name,
+          image: item.product.images?.[0] || null,
+          quantity: item.quantity,
+          amount: item.product.price * item.quantity,
+        })),
+        subtotal: cartTotal,
+        discount: couponDiscount,
+        shipping: selectedShipping.price,
+        total: orderTotal,
+      };
 
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -784,6 +833,7 @@ const Checkout = () => {
       }
 
       setPaymentResult(paymentData);
+      setCheckoutSummary(orderSummary);
       await clearCart.mutateAsync();
 
       toast.success("Pagamento iniciado. Verifique o status ou finalize pelo QR/Boleto.");
@@ -1235,13 +1285,13 @@ const Checkout = () => {
                 <CardTitle className="font-serif">Resumo</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {cartItems.map((item) => (
+                {summary.items.map((item) => (
                   <div key={item.id} className="flex gap-3">
                     <div className="w-16 h-16 bg-muted rounded-md overflow-hidden flex-shrink-0">
-                      {item.product.images?.[0] ? (
+                      {item.image ? (
                         <img
-                          src={item.product.images[0]}
-                          alt={item.product.name}
+                          src={item.image}
+                          alt={item.name}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -1251,10 +1301,10 @@ const Checkout = () => {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.product.name}</p>
+                      <p className="text-sm font-medium truncate">{item.name}</p>
                       <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
                       <p className="text-sm font-semibold">
-                        {formatPrice(item.product.price * item.quantity)}
+                        {formatPrice(item.amount)}
                       </p>
                     </div>
                   </div>
@@ -1268,14 +1318,14 @@ const Checkout = () => {
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                       className="flex-1"
-                      disabled={!!appliedCoupon}
+                      disabled={!!appliedCoupon || summaryLocked}
                     />
                     {appliedCoupon ? (
-                      <Button variant="outline" onClick={handleRemoveCoupon}>
+                      <Button variant="outline" onClick={handleRemoveCoupon} disabled={summaryLocked}>
                         Remover
                       </Button>
                     ) : (
-                      <Button onClick={handleApplyCoupon}>Aplicar</Button>
+                      <Button onClick={handleApplyCoupon} disabled={summaryLocked}>Aplicar</Button>
                     )}
                   </div>
                   {appliedCoupon && (
@@ -1291,23 +1341,23 @@ const Checkout = () => {
                 <div className="border-t pt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal</span>
-                    <span>{formatPrice(cartTotal)}</span>
+                    <span>{formatPrice(summary.subtotal)}</span>
                   </div>
-                  {couponDiscount > 0 && (
+                  {summary.discount > 0 && (
                     <div className="flex justify-between text-sm text-green-700">
                       <span>Desconto</span>
-                      <span>- {formatPrice(couponDiscount)}</span>
+                      <span>- {formatPrice(summary.discount)}</span>
                     </div>
                   )}
-                  {selectedShipping && (
+                  {summary.shipping > 0 || selectedShipping ? (
                     <div className="flex justify-between text-sm">
                       <span>Frete</span>
-                      <span>{formatPrice(selectedShipping.price)}</span>
+                      <span>{formatPrice(summary.shipping)}</span>
                     </div>
-                  )}
+                  ) : null}
                   <div className="flex justify-between font-semibold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span className="text-primary">{formatPrice(total)}</span>
+                    <span className="text-primary">{formatPrice(summary.total)}</span>
                   </div>
                 </div>
               </CardContent>
