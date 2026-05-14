@@ -132,6 +132,7 @@ const Checkout = () => {
   const [payerFirstName, setPayerFirstName] = useState("");
   const [payerLastName, setPayerLastName] = useState("");
   const [payerEmail, setPayerEmail] = useState(user?.email || "");
+  const [payerPhone, setPayerPhone] = useState(user?.user_metadata?.phone || "");
   const [payerDocument, setPayerDocument] = useState("");
   const [paymentResult, setPaymentResult] = useState<any>(null);
   const [cardFormError, setCardFormError] = useState("");
@@ -186,6 +187,7 @@ const Checkout = () => {
     setPayerFirstName(parts.shift() || "");
     setPayerLastName(parts.join(" "));
     setPayerName(full);
+    setPayerPhone(user?.user_metadata?.phone || "");
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
@@ -592,8 +594,9 @@ const Checkout = () => {
       toast.error("Selecione uma opção de frete");
       return;
     }
-    if (!payerFirstName || !payerLastName || !payerEmail || !payerDocument) {
-      toast.error("Informe nome, sobrenome, e-mail e CPF/CNPJ para pagar");
+    const payerPhoneClean = String(payerPhone || "").replace(/\D/g, "").slice(0, 13);
+    if (!payerFirstName || !payerLastName || !payerEmail || !payerDocument || payerPhoneClean.length < 10) {
+      toast.error("Informe nome, sobrenome, e-mail, telefone e CPF/CNPJ para pagar");
       return;
     }
     if (paymentMethod === "card" && !MERCADO_PAGO_PUBLIC_KEY) {
@@ -623,6 +626,7 @@ const Checkout = () => {
             first_name: payerFirstName,
             last_name: payerLastName,
             email: payerEmail,
+            phone: payerPhoneClean,
             document: payerDocumentClean,
             document_type: payerDocumentClean.length > 11 ? "CNPJ" : "CPF",
           }
@@ -632,6 +636,7 @@ const Checkout = () => {
             first_name: payerFirstName,
             last_name: payerLastName,
             email: payerEmail,
+            phone: payerPhoneClean,
             document: payerDocumentClean,
             document_type: payerDocumentClean.length > 11 ? "CNPJ" : "CPF",
             address: {
@@ -860,6 +865,7 @@ const Checkout = () => {
             name: `${payerFirstName} ${payerLastName}`.trim(),
             first_name: payerFirstName,
             last_name: payerLastName,
+            phone: payerPhoneClean,
             document: payerDocument.replace(/\D/g, ""),
             document_type: identificationType,
             statement_descriptor: "Miranda Coast",
@@ -1189,6 +1195,15 @@ const Checkout = () => {
           <div>
             <Label>Email *</Label>
             <Input value={payerEmail} onChange={(e) => setPayerEmail(e.target.value)} />
+          </div>
+
+          <div>
+            <Label>Telefone/WhatsApp *</Label>
+            <Input
+              value={payerPhone}
+              onChange={(e) => setPayerPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
+              placeholder="(47) 99999-9999"
+            />
           </div>
 
           <div>

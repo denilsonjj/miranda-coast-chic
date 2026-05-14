@@ -22,6 +22,8 @@ const isStrongPassword = (password: string) =>
   /\d/.test(password) &&
   /[^A-Za-z0-9]/.test(password);
 
+const cleanPhone = (phone: string) => phone.replace(/\D/g, "").slice(0, 13);
+
 const getFriendlyAuthError = (message: string) => {
   if (message === "Invalid login credentials") return "Email ou senha incorretos";
   if (message.includes("already registered")) return "Este email ja esta cadastrado";
@@ -58,6 +60,7 @@ const Auth = () => {
   const [loginPassword, setLoginPassword] = useState("");
 
   const [signupName, setSignupName] = useState("");
+  const [signupPhone, setSignupPhone] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
@@ -105,9 +108,15 @@ const Auth = () => {
 
     if (!validatePassword(signupPassword)) return;
 
+    const phone = cleanPhone(signupPhone);
+    if (phone.length < 10) {
+      toast.error("Informe um telefone/WhatsApp valido.");
+      return;
+    }
+
     setIsLoading(true);
 
-    const { error } = await signUp(signupEmail.trim(), signupPassword, signupName.trim());
+    const { error } = await signUp(signupEmail.trim(), signupPassword, signupName.trim(), phone);
 
     if (error) {
       toast.error(getFriendlyAuthError(error.message));
@@ -296,6 +305,18 @@ const Auth = () => {
                       value={signupEmail}
                       onChange={(e) => setSignupEmail(e.target.value)}
                       autoComplete="email"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-phone">Telefone/WhatsApp</Label>
+                    <Input
+                      id="signup-phone"
+                      type="tel"
+                      placeholder="(47) 99999-9999"
+                      value={signupPhone}
+                      onChange={(e) => setSignupPhone(cleanPhone(e.target.value))}
+                      autoComplete="tel"
                       required
                     />
                   </div>

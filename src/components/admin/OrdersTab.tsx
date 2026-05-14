@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, Printer, Package, Eye, Truck, Search } from 'lucide-react';
+import { Loader2, Printer, Package, Eye, Truck, Search, MessageCircle, MapPin } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -176,9 +176,40 @@ export const OrdersTab = () => {
     });
   };
 
+  const isPickupOrder = (order: Order) =>
+    Boolean(order.shipping_service?.pickup || order.shipping_service?.id === 'pickup' || order.shipping_address?.pickup);
+
+  const getCustomerPhone = (order: Order) =>
+    String(order.shipping_address?.phone || order.shipping_address?.whatsapp || order.shipping_address?.telephone || '');
+
+  const getWhatsAppNumber = (phone: string) => {
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('55') && digits.length >= 12) return digits;
+    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+    return digits;
+  };
+
+  const openCustomerWhatsApp = (order: Order) => {
+    const number = getWhatsAppNumber(getCustomerPhone(order));
+    if (!number) {
+      toast.error('Este pedido nao tem telefone do cliente.');
+      return;
+    }
+
+    const message = [
+      `Ola, ${order.shipping_address?.name || 'tudo bem'}!`,
+      `Aqui e da Miranda Coast sobre o pedido #${order.id.slice(0, 8)}.`,
+    ].join('\n');
+
+    window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  };
+
   const filteredOrders = orders.filter(order => {
+    const phoneSearch = searchTerm.replace(/\D/g, '');
     const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.shipping_address?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+      order.shipping_address?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      Boolean(phoneSearch && getCustomerPhone(order).includes(phoneSearch));
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -264,6 +295,17 @@ export const OrdersTab = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">{order.shipping_address?.name || 'Cliente'}</p>
+                    {getCustomerPhone(order) && (
+                      <p className="text-sm text-muted-foreground">
+                        WhatsApp: {getCustomerPhone(order)}
+                      </p>
+                    )}
+                    {isPickupOrder(order) && (
+                      <p className="text-sm text-primary flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Retirada na loja
+                      </p>
+                    )}
                     <p className="text-sm text-muted-foreground">
                       {order.order_items?.length || 0} item(s) • {formatPrice(order.total)}
                     </p>
@@ -274,7 +316,11 @@ export const OrdersTab = () => {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" onClick={() => openCustomerWhatsApp(order)}>
+                      <MessageCircle className="h-4 w-4 mr-1" />
+                      WhatsApp
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => openDetails(order)}>
                       <Eye className="h-4 w-4 mr-1" />
                       Detalhes
@@ -310,7 +356,7 @@ export const OrdersTab = () => {
             </DialogHeader>
             {selectedOrder && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label>Status do Pedido</Label>
                     <Select
@@ -366,11 +412,17 @@ export const OrdersTab = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label className="mb-2 block">Endereço de Entrega</Label>
+                    <Label className="mb-2 block">
+                      {isPickupOrder(selectedOrder) ? 'Endereço de Retirada' : 'Endereço de Entrega'}
+                    </Label>
                     <div className="text-sm space-y-1 p-3 bg-muted rounded">
-                      <p className="font-medium">{selectedOrder.shipping_address?.name}</p>
+                      <p className="font-medium">
+                        {isPickupOrder(selectedOrder)
+                          ? selectedOrder.shipping_service?.address?.name || 'Miranda Coast'
+                          : selectedOrder.shipping_address?.name}
+                      </p>
                       <p>{selectedOrder.shipping_address?.street}, {selectedOrder.shipping_address?.number}</p>
                       {selectedOrder.shipping_address?.complement && (
                         <p>{selectedOrder.shipping_address.complement}</p>
@@ -378,6 +430,19 @@ export const OrdersTab = () => {
                       <p>{selectedOrder.shipping_address?.neighborhood}</p>
                       <p>{selectedOrder.shipping_address?.city} - {selectedOrder.shipping_address?.state}</p>
                       <p>CEP: {selectedOrder.shipping_address?.cep}</p>
+                      {getCustomerPhone(selectedOrder) && (
+                        <div className="border-t pt-2 mt-2 space-y-2">
+                          <p>WhatsApp do cliente: {getCustomerPhone(selectedOrder)}</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openCustomerWhatsApp(selectedOrder)}
+                          >
+                            <MessageCircle className="h-4 w-4 mr-1" />
+                            Chamar no WhatsApp
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div>
