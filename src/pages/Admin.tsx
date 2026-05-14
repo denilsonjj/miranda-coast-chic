@@ -111,7 +111,7 @@ const Admin = () => {
 
   const [heroForm, setHeroForm] = useState({
     image_url: "",
-    title: "Miranda Costa Chic",
+    title: "Miranda Coast Chic",
     subtitle: "Moda Feminina de Luxo",
     cta_text: "Explorar Coleção",
     cta_link: "/loja",
@@ -228,7 +228,7 @@ const Admin = () => {
     if (heroSettings) {
       setHeroForm({
         image_url: heroSettings.image_url || "",
-        title: heroSettings.title || "Miranda Costa Chic",
+        title: heroSettings.title || "Miranda Coast Chic",
         subtitle: heroSettings.subtitle || "Moda Feminina de Luxo",
         cta_text: heroSettings.cta_text || "Explorar Coleção",
         cta_link: heroSettings.cta_link || "/loja",
@@ -1239,7 +1239,7 @@ const Admin = () => {
                             title: e.target.value,
                           }))
                         }
-                        placeholder="Miranda Costa Chic"
+                        placeholder="Miranda Coast Chic"
                       />
                     </div>
 

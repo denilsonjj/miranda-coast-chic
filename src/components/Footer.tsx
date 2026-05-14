@@ -95,7 +95,7 @@ const Footer = () => {
 
         <div className="mt-8 pt-8 border-t border-border text-center">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Miranda Costa. Todos os direitos reservados.
+            © {new Date().getFullYear()} Miranda Coast. Todos os direitos reservados.
           </p>
         </div>
       </div>
