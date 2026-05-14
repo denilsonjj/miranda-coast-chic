@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check, Copy } from "lucide-react";
+import { ChevronRight, ChevronLeft, Package, MapPin, CreditCard, Check, Copy, MessageCircle, Store } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -69,6 +69,7 @@ const MERCADO_PAGO_WEBHOOK =
   DEFAULT_WEBHOOK_URL ||
   `${window.location.origin}/api/webhook/mercado-pago`;
 const MERCADO_PAGO_PUBLIC_KEY = import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY || "";
+const STORE_WHATSAPP_NUMBER = (import.meta.env.VITE_STORE_WHATSAPP_NUMBER || "554784007953").replace(/\D/g, "");
 
 const LOCAL_PICKUP_OPTION: ShippingOption = {
   id: "pickup",
@@ -532,6 +533,60 @@ const Checkout = () => {
     }
   };
 
+  const handlePickupCheckout = () => {
+    const pickupAddress = LOCAL_PICKUP_OPTION.address;
+    setAddress((prev) => ({
+      ...prev,
+      cep: pickupAddress?.postal_code || ORIGIN_CEP,
+      street: pickupAddress?.street || "",
+      number: pickupAddress?.number || "",
+      neighborhood: pickupAddress?.district || "",
+      city: pickupAddress?.city || "",
+      state: pickupAddress?.state || "",
+    }));
+    setShippingOptions([LOCAL_PICKUP_OPTION]);
+    setSelectedShipping(LOCAL_PICKUP_OPTION);
+    setStep(3);
+    toast.success("Retirada na loja selecionada. Finalize seus dados de pagamento.");
+  };
+
+  const handleWhatsAppCheckout = () => {
+    if (cartItems.length === 0) {
+      toast.error("Seu carrinho esta vazio.");
+      return;
+    }
+
+    if (!STORE_WHATSAPP_NUMBER) {
+      toast.error("WhatsApp da loja nao configurado.");
+      return;
+    }
+
+    const itemLines = cartItems
+      .map((item, index) => {
+        const details = [item.size ? `Tam: ${item.size}` : null, item.color ? `Cor: ${item.color}` : null]
+          .filter(Boolean)
+          .join(" | ");
+        return `${index + 1}. ${item.product.name} - Qtd: ${item.quantity}${
+          details ? ` (${details})` : ""
+        } - ${formatPrice(item.product.price * item.quantity)}`;
+      })
+      .join("\n");
+
+    const message = [
+      "Ola, Miranda Coast! Gostaria de combinar uma compra para BC/regiao proxima.",
+      "",
+      "Itens do carrinho:",
+      itemLines,
+      "",
+      `Subtotal: ${formatPrice(cartTotal)}`,
+      user?.email ? `Cliente: ${user.email}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    window.open(`https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  };
+
   const handleCreateOrder = async (cardDataFromMP?: any) => {
     if (!selectedShipping) {
       toast.error("Selecione uma opção de frete");
@@ -552,6 +607,43 @@ const Checkout = () => {
     paymentHandledRef.current = false;
 
     try {
+      const payerDocumentClean = payerDocument.replace(/\D/g, "");
+      const isPickup = Boolean(selectedShipping.pickup || selectedShipping.id === LOCAL_PICKUP_OPTION.id);
+      const shippingAddressPayload = isPickup
+        ? {
+            pickup: true,
+            cep: LOCAL_PICKUP_OPTION.address?.postal_code || ORIGIN_CEP,
+            street: LOCAL_PICKUP_OPTION.address?.street || "",
+            number: LOCAL_PICKUP_OPTION.address?.number || "",
+            complement: "Retirada na loja",
+            neighborhood: LOCAL_PICKUP_OPTION.address?.district || "",
+            city: LOCAL_PICKUP_OPTION.address?.city || "",
+            state: LOCAL_PICKUP_OPTION.address?.state || "",
+            name: `${payerFirstName} ${payerLastName}`.trim() || user?.email || "Cliente",
+            first_name: payerFirstName,
+            last_name: payerLastName,
+            email: payerEmail,
+            document: payerDocumentClean,
+            document_type: payerDocumentClean.length > 11 ? "CNPJ" : "CPF",
+          }
+        : {
+            ...address,
+            name: `${payerFirstName} ${payerLastName}`.trim() || user?.email || "Cliente",
+            first_name: payerFirstName,
+            last_name: payerLastName,
+            email: payerEmail,
+            document: payerDocumentClean,
+            document_type: payerDocumentClean.length > 11 ? "CNPJ" : "CPF",
+            address: {
+              zip_code: address.cep.replace(/\D/g, ""),
+              street_name: address.street,
+              street_number: address.number,
+              neighborhood: address.neighborhood,
+              city: address.city,
+              federal_unit: address.state,
+            },
+          };
+
       if (cartItems.length === 0) {
         toast.error("Seu carrinho está vazio");
         setIsLoading(false);
@@ -657,23 +749,7 @@ const Checkout = () => {
           discount_total: couponDiscount,
           coupon_code: appliedCoupon?.code || null,
           total: orderTotal,
-          shipping_address: {
-            ...address,
-            name: `${payerFirstName} ${payerLastName}`.trim() || user?.email || "Cliente",
-            first_name: payerFirstName,
-            last_name: payerLastName,
-            email: payerEmail,
-            document: address.document.replace(/\D/g, ""),
-            document_type: payerDocument.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF",
-            address: {
-              zip_code: address.cep.replace(/\D/g, ""),
-              street_name: address.street,
-              street_number: address.number,
-              neighborhood: address.neighborhood,
-              city: address.city,
-              federal_unit: address.state,
-            },
-          } as any,
+          shipping_address: shippingAddressPayload as any,
           shipping_service: selectedShipping as any,
           status: "pending",
           payment_status: "pending",
@@ -787,14 +863,16 @@ const Checkout = () => {
             document: payerDocument.replace(/\D/g, ""),
             document_type: identificationType,
             statement_descriptor: "Miranda Coast",
-            address: {
-              zip_code: address.cep.replace(/\D/g, ""),
-              street_name: address.street,
-              street_number: address.number,
-              neighborhood: address.neighborhood,
-              city: address.city,
-              federal_unit: address.state,
-            },
+            address: isPickup
+              ? undefined
+              : {
+                  zip_code: address.cep.replace(/\D/g, ""),
+                  street_name: address.street,
+                  street_number: address.number,
+                  neighborhood: address.neighborhood,
+                  city: address.city,
+                  federal_unit: address.state,
+                },
           },
           shipping_cost: selectedShipping.price || 0,
           back_urls: {
@@ -892,9 +970,45 @@ const Checkout = () => {
             {step === 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-serif">Endereço de Entrega</CardTitle>
+                  <CardTitle className="font-serif">Como voce quer finalizar?</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    <button
+                      type="button"
+                      onClick={handlePickupCheckout}
+                      className="flex items-start gap-4 rounded-lg border p-4 text-left transition-all hover:border-primary hover:bg-primary/5"
+                    >
+                      <Store className="mt-1 h-5 w-5 shrink-0 text-primary" />
+                      <div className="space-y-1">
+                        <p className="font-medium">Retirar na loja</p>
+                        <p className="text-sm text-muted-foreground">
+                          Pula endereco e frete. Voce preenche apenas seus dados de pagamento.
+                        </p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleWhatsAppCheckout}
+                      className="flex items-start gap-4 rounded-lg border p-4 text-left transition-all hover:border-primary hover:bg-primary/5"
+                    >
+                      <MessageCircle className="mt-1 h-5 w-5 shrink-0 text-primary" />
+                      <div className="space-y-1">
+                        <p className="font-medium">BC e regioes proximas</p>
+                        <p className="text-sm text-muted-foreground">
+                          Combina pagamento, entrega ou retirada direto pelo WhatsApp com a loja.
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h2 className="font-medium">Receber em casa</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Informe seu endereco para calcular o frete para todo o Brasil.
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2 sm:col-span-1">
                       <Label htmlFor="cep">CEP *</Label>

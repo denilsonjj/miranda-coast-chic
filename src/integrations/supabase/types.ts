@@ -206,6 +206,7 @@ export type Database = {
           shipping_service: Json | null
           shipping_status: string | null
           status: string
+          store_notified_at: string | null
           subtotal: number
           total: number
           tracking_code: string | null
@@ -225,6 +226,7 @@ export type Database = {
           shipping_service?: Json | null
           shipping_status?: string | null
           status?: string
+          store_notified_at?: string | null
           subtotal: number
           total: number
           tracking_code?: string | null
@@ -246,6 +248,7 @@ export type Database = {
           shipping_service?: Json | null
           shipping_status?: string | null
           status?: string
+          store_notified_at?: string | null
           subtotal?: number
           total?: number
           tracking_code?: string | null

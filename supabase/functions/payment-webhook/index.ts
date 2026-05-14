@@ -34,6 +34,84 @@ const hmacSha256 = async (secret: string, value: string) => {
   return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
 };
 
+const formatMoney = (value: unknown) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+
+const escapeHtml = (value: unknown) =>
+  String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+const notifyStoreOfPaidOrder = async (supabase: ReturnType<typeof createClient>, orderId: string, paymentId: string) => {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendApiKey) return;
+
+  const storeEmail = Deno.env.get("STORE_NOTIFICATION_EMAIL") || "mirandacoastr@gmail.com";
+  const fromEmail = Deno.env.get("STORE_NOTIFICATION_FROM") || "Miranda Coast <onboarding@resend.dev>";
+  const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "https://mirandacoast.com.br").replace(/\/$/, "");
+
+  const { data: updatedOrder, error: markError } = await supabase
+    .from("orders")
+    .update({ store_notified_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .is("store_notified_at", null)
+    .select("id,total,shipping_address,shipping_service,order_items(*)")
+    .maybeSingle();
+
+  if (markError) {
+    console.error("Store notification mark failed", orderId, markError.message);
+    return;
+  }
+
+  if (!updatedOrder) return;
+
+  const items = Array.isArray(updatedOrder.order_items) ? updatedOrder.order_items : [];
+  const itemLines = items
+    .map((item: any) => {
+      const details = [item.size ? `Tam: ${item.size}` : null, item.color ? `Cor: ${item.color}` : null]
+        .filter(Boolean)
+        .join(" | ");
+      return `<li>${escapeHtml(item.quantity)}x ${escapeHtml(item.product_name)}${details ? ` (${escapeHtml(details)})` : ""}</li>`;
+    })
+    .join("");
+  const customerName = updatedOrder.shipping_address?.name || "Cliente";
+  const customerEmail = updatedOrder.shipping_address?.email || "";
+  const shippingName = updatedOrder.shipping_service?.pickup
+    ? "Retirada na loja"
+    : updatedOrder.shipping_service?.name || "Entrega";
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [storeEmail],
+      subject: `Compra nova paga - Pedido #${orderId.slice(0, 8)}`,
+      html: `
+        <h2>Compra nova confirmada</h2>
+        <p><strong>Pedido:</strong> #${orderId.slice(0, 8)}</p>
+        <p><strong>Total:</strong> ${formatMoney(updatedOrder.total)}</p>
+        <p><strong>Cliente:</strong> ${escapeHtml(customerName)}${customerEmail ? ` (${escapeHtml(customerEmail)})` : ""}</p>
+        <p><strong>Entrega:</strong> ${escapeHtml(shippingName)}</p>
+        <p><strong>Pagamento Mercado Pago:</strong> ${escapeHtml(paymentId)}</p>
+        <h3>Itens</h3>
+        <ul>${itemLines}</ul>
+        <p><a href="${publicSiteUrl}/admin">Abrir painel admin</a></p>
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("Store notification email failed", orderId, response.status, await response.text());
+  }
+};
+
 const parseMercadoPagoSignature = (header: string) => {
   return header.split(",").reduce<Record<string, string>>((acc, part) => {
     const [key, ...valueParts] = part.trim().split("=");
@@ -194,6 +272,8 @@ serve(async (req) => {
 
         return json({ error: error.message }, 500);
       }
+
+      await notifyStoreOfPaidOrder(supabase, externalReference, paymentId);
 
       return json({ success: true, message: "Order paid" });
     }
