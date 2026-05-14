@@ -47,7 +47,10 @@ export const ImageUpload = ({ value = [], onChange, maxImages = 5, folder = 'pro
 
         const { error: uploadError } = await supabase.storage
           .from('images')
-          .upload(fileName, file);
+          .upload(fileName, file, {
+            cacheControl: '31536000',
+            upsert: false,
+          });
 
         if (uploadError) {
           console.error('Upload error:', uploadError);

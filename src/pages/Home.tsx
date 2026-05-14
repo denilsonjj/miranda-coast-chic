@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,23 @@ import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { getOptimizedSupabaseImageUrl, preloadImage } from "@/lib/image-url";
+
+const HERO_SETTINGS_CACHE_KEY = "miranda-coast:hero-settings";
+
+const getCachedHeroSettings = () => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const cached = window.localStorage.getItem(HERO_SETTINGS_CACHE_KEY);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached);
+    return parsed?.image_url ? parsed : null;
+  } catch {
+    return null;
+  }
+};
 
 const Home = () => {
   const navigate = useNavigate();
@@ -17,10 +35,13 @@ const Home = () => {
 
   const { data: heroSettings, isLoading: heroLoading } = useQuery({
     queryKey: ['hero-settings'],
+    initialData: getCachedHeroSettings,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('hero_settings')
-        .select('*')
+        .select('image_url,title,subtitle,cta_text,cta_link,is_active,display_order')
         .eq('is_active', true)
         .order('display_order', { ascending: true })
         .limit(1);
@@ -30,11 +51,31 @@ const Home = () => {
     },
   });
 
-  const currentHeroImage = heroSettings?.image_url || "";
+  const currentHeroImage = heroSettings?.image_url || import.meta.env.VITE_HERO_IMAGE_URL || "";
+  const optimizedHeroImage = useMemo(
+    () => getOptimizedSupabaseImageUrl(currentHeroImage, { width: 1920, quality: 78 }),
+    [currentHeroImage],
+  );
   const heroTitle = heroSettings?.title || "Descubra seu estilo";
   const heroSubtitle = heroSettings?.subtitle || "Moda feminina delicada e moderna, inspirada pela beleza do litoral";
   const heroCtaText = heroSettings?.cta_text || "Ver Novidades";
   const heroCtaLink = heroSettings?.cta_link || "/novidades";
+
+  useEffect(() => {
+    if (!heroSettings?.image_url) return;
+
+    try {
+      window.localStorage.setItem(HERO_SETTINGS_CACHE_KEY, JSON.stringify(heroSettings));
+    } catch {
+      // Local storage can be unavailable in private browsing.
+    }
+  }, [heroSettings]);
+
+  useEffect(() => {
+    if (optimizedHeroImage) {
+      preloadImage(optimizedHeroImage);
+    }
+  }, [optimizedHeroImage]);
 
   const defaultCategories = [
     { name: "Vestidos", image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800&q=80" },
@@ -142,9 +183,9 @@ const Home = () => {
       {/* Hero Section */}
       <section className="relative h-[85vh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-muted">
-          {currentHeroImage ? (
+          {optimizedHeroImage ? (
             <img
-              src={currentHeroImage}
+              src={optimizedHeroImage}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
               loading="eager"
