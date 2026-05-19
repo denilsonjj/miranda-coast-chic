@@ -82,7 +82,16 @@ const SupabaseAuthRedirectHandler = () => {
     if (isRecovery && code) {
       let cancelled = false;
 
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (cancelled) return;
+
+        if (session) {
+          window.history.replaceState(null, "", "/auth?recovery=1");
+          navigate("/auth?recovery=1", { replace: true });
+          return;
+        }
+
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (cancelled) return;
 
         if (error) {
