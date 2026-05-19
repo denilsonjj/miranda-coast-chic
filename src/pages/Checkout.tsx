@@ -326,9 +326,39 @@ const Checkout = () => {
     setNativeFieldValue("form-identificationType", getPayerIdentificationType());
   };
 
+  const ensureSingleInstallmentOption = () => {
+    const select = document.getElementById("form-installments") as HTMLSelectElement | null;
+    if (!select) return;
+
+    const hasUsableOption = Array.from(select.options).some((option) => option.value && !option.disabled);
+    if (!hasUsableOption) {
+      select.innerHTML = "";
+      const option = document.createElement("option");
+      option.value = "1";
+      option.textContent = `1x de ${formatPrice(total)} sem juros`;
+      select.appendChild(option);
+    } else if (select.options.length === 1 && select.options[0]?.value === "1") {
+      select.options[0].textContent = `1x de ${formatPrice(total)} sem juros`;
+    }
+
+    if (!select.value) {
+      select.value = "1";
+    }
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const isInstallmentsLookupError = (error: any) => {
+    const details = Array.isArray(error)
+      ? error.map((item) => item?.message || item?.description || item?.cause || String(item)).join(" ")
+      : error?.message || error?.description || String(error || "");
+
+    return /installments|payer_costs|parcelas/i.test(details);
+  };
+
   useEffect(() => {
     if (paymentMethod === "card") {
       syncMercadoPagoCardFields();
+      ensureSingleInstallmentOption();
     }
   }, [paymentMethod, payerFirstName, payerLastName, payerEmail, payerDocument, cardholderName]);
 
@@ -379,6 +409,12 @@ const Checkout = () => {
           },
           onError: (error: any) => {
             console.warn("Card form error", error);
+            if (isInstallmentsLookupError(error)) {
+              ensureSingleInstallmentOption();
+              setCardFormError("");
+              return;
+            }
+
             setCardFormError("Verifique os dados do cartão.");
           },
           onSubmit: async (event: any) => {
@@ -386,6 +422,7 @@ const Checkout = () => {
 
             try {
               syncMercadoPagoCardFields();
+              ensureSingleInstallmentOption();
               const cardData = cardForm.getCardFormData();
               if (!cardData.token) {
                 setCardFormError("Não foi possível tokenizar o cartão. Confira os dados e tente novamente.");
@@ -893,7 +930,9 @@ const Checkout = () => {
 
         token = cardData.token;
         paymentMethodId = cardData.paymentMethodId;
-        installments = Number(cardData.installments) || 1;
+        installments =
+          Number(cardData.installments || (document.getElementById("form-installments") as HTMLSelectElement | null)?.value) ||
+          1;
         identificationType = cardData.identificationType || identificationType;
 
         if (!token || !paymentMethodId) {
@@ -1353,12 +1392,10 @@ const Checkout = () => {
                 <Label htmlFor="form-installments">Parcelas</Label>
                 <select
                   id="form-installments"
-                  defaultValue=""
+                  defaultValue="1"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
                 >
-                  <option value="" disabled>
-                    Selecione
-                  </option>
+                  <option value="1">1x de {formatPrice(total)} sem juros</option>
                 </select>
               </div>
 
@@ -1477,6 +1514,7 @@ const Checkout = () => {
                         return;
                       }
                       syncMercadoPagoCardFields();
+                      ensureSingleInstallmentOption();
                       if (!cardFormRef.current?.submit) {
                         toast.error("Formulário do cartão não iniciado");
                         return;
