@@ -144,8 +144,8 @@ const PoliticaTroca = () => {
                 <div>
                   <h3 className="text-xl font-serif mb-2">Importante</h3>
                   <p className="text-muted-foreground">
-                    Produtos em promoção seguem as mesmas regras de troca e devolução. Lingeries,
-                    bodys e biquínis só podem ser trocados caso apresentem defeito de fabricação,
+                    Produtos em promoção não terão troca, exceto em caso de defeito de fabricação.
+                    Bodys e biquínis só podem ser trocados caso apresentem defeito de fabricação,
                     conforme legislação sanitária vigente.
                   </p>
                 </div>
