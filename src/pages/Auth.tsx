@@ -10,11 +10,13 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 const PASSWORD_RULES = [
-  "minimo de 8 caracteres",
+  "mínimo de 8 caracteres",
   "pelo menos 1 letra",
-  "pelo menos 1 numero",
-  "pelo menos 1 simbolo",
+  "pelo menos 1 número",
+  "pelo menos 1 símbolo",
 ];
+
+const PASSWORD_HELP_TEXT = "Mínimo de 8 caracteres, incluindo número e símbolo.";
 
 const isStrongPassword = (password: string) =>
   password.length >= 8 &&
@@ -26,7 +28,7 @@ const cleanPhone = (phone: string) => phone.replace(/\D/g, "").slice(0, 13);
 
 const getFriendlyAuthError = (message: string) => {
   if (message === "Invalid login credentials") return "Email ou senha incorretos";
-  if (message.includes("already registered")) return "Este email ja esta cadastrado";
+  if (message.includes("already registered")) return "Este email já está cadastrado";
   if (message.includes("Password should be at least")) {
     return "A senha precisa seguir as regras abaixo.";
   }
@@ -102,7 +104,7 @@ const Auth = () => {
     e.preventDefault();
 
     if (signupPassword !== signupConfirmPassword) {
-      toast.error("As senhas nao coincidem");
+      toast.error("As senhas não coincidem");
       return;
     }
 
@@ -110,7 +112,7 @@ const Auth = () => {
 
     const phone = cleanPhone(signupPhone);
     if (phone.length < 10) {
-      toast.error("Informe um telefone/WhatsApp valido.");
+      toast.error("Informe um telefone/WhatsApp válido.");
       return;
     }
 
@@ -121,7 +123,7 @@ const Auth = () => {
     if (error) {
       toast.error(getFriendlyAuthError(error.message));
     } else {
-      toast.success("Conta criada com sucesso! Verifique seu email se a confirmacao estiver ativa.");
+      toast.success("Conta criada com sucesso! Verifique seu email se a confirmação estiver ativa.");
       navigate("/");
     }
     setIsLoading(false);
@@ -132,7 +134,7 @@ const Auth = () => {
     const email = resetEmail.trim() || loginEmail.trim();
 
     if (!email) {
-      toast.error("Informe seu email para receber o link de recuperacao.");
+      toast.error("Informe seu email para receber o link de recuperação.");
       return;
     }
 
@@ -152,7 +154,7 @@ const Auth = () => {
     e.preventDefault();
 
     if (newPassword !== newPasswordConfirm) {
-      toast.error("As senhas nao coincidem");
+      toast.error("As senhas não coincidem");
       return;
     }
 
@@ -197,7 +199,7 @@ const Auth = () => {
                   <Input
                     id="new-password"
                     type="password"
-                    placeholder="Minimo 8, com numero e simbolo"
+                    placeholder="Exemplo: Miranda@2026"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     autoComplete="new-password"
@@ -217,7 +219,7 @@ const Auth = () => {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  A senha deve ter {PASSWORD_RULES.join(", ")}.
+                  {PASSWORD_HELP_TEXT}
                 </p>
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -325,14 +327,14 @@ const Auth = () => {
                     <Input
                       id="signup-password"
                       type="password"
-                      placeholder="Minimo 8, com numero e simbolo"
+                      placeholder="Exemplo: Miranda@2026"
                       value={signupPassword}
                       onChange={(e) => setSignupPassword(e.target.value)}
                       autoComplete="new-password"
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Use {PASSWORD_RULES.join(", ")}.
+                      {PASSWORD_HELP_TEXT}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -369,7 +371,7 @@ const Auth = () => {
                     />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Voce recebera um link para criar uma nova senha.
+                    Você receberá um link para criar uma nova senha.
                   </p>
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
