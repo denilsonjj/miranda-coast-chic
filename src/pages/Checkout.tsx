@@ -134,10 +134,18 @@ const Checkout = () => {
   const [payerEmail, setPayerEmail] = useState(user?.email || "");
   const [payerPhone, setPayerPhone] = useState(user?.user_metadata?.phone || "");
   const [payerDocument, setPayerDocument] = useState("");
+  const [cardholderName, setCardholderName] = useState("");
   const [paymentResult, setPaymentResult] = useState<any>(null);
   const [cardFormError, setCardFormError] = useState("");
   const mpRef = useRef<any>(null);
   const cardFormRef = useRef<any>(null);
+  const cardFieldValuesRef = useRef({
+    firstName: "",
+    lastName: "",
+    email: "",
+    document: "",
+    cardholderName: "",
+  });
   const paymentHandledRef = useRef(false);
   const redirectTimerRef = useRef<number | null>(null);
   const [mpScriptLoaded, setMpScriptLoaded] = useState(false);
@@ -188,6 +196,7 @@ const Checkout = () => {
     setPayerLastName(parts.join(" "));
     setPayerName(full);
     setPayerPhone(user?.user_metadata?.phone || "");
+    setCardholderName((current) => current || full.toUpperCase());
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
@@ -274,6 +283,56 @@ const Checkout = () => {
   }, [appliedCoupon, cartTotal]);
 
   useEffect(() => {
+    const fullName = `${payerFirstName} ${payerLastName}`.trim();
+    if (fullName && !cardholderName.trim()) {
+      setCardholderName(fullName.toUpperCase());
+    }
+  }, [payerFirstName, payerLastName, cardholderName]);
+
+  useEffect(() => {
+    cardFieldValuesRef.current = {
+      firstName: payerFirstName,
+      lastName: payerLastName,
+      email: payerEmail,
+      document: payerDocument,
+      cardholderName,
+    };
+  }, [payerFirstName, payerLastName, payerEmail, payerDocument, cardholderName]);
+
+  const setNativeFieldValue = (id: string, value: string) => {
+    const field = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (!field || field.value === value) return;
+
+    field.value = value;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const getPayerIdentificationType = (documentValue = cardFieldValuesRef.current.document) =>
+    documentValue.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF";
+
+  const syncMercadoPagoCardFields = () => {
+    const values = cardFieldValuesRef.current;
+    const fullName = `${values.firstName} ${values.lastName}`.trim();
+    const holderName = (values.cardholderName.trim() || fullName).toUpperCase();
+
+    if (holderName && !cardholderName.trim()) {
+      setCardholderName(holderName);
+    }
+
+    setNativeFieldValue("form-cardholderName", holderName);
+    setNativeFieldValue("form-cardholderEmail", values.email.trim());
+    setNativeFieldValue("form-identificationNumber", values.document.replace(/\D/g, ""));
+    setNativeFieldValue("form-identificationType", getPayerIdentificationType());
+  };
+
+  useEffect(() => {
+    if (paymentMethod === "card") {
+      syncMercadoPagoCardFields();
+    }
+  }, [paymentMethod, payerFirstName, payerLastName, payerEmail, payerDocument, cardholderName]);
+
+  useEffect(() => {
     if (step === 3 && paymentMethod === "card" && MERCADO_PAGO_PUBLIC_KEY) {
       if (mpRef.current) return;
       const script = document.createElement("script");
@@ -326,6 +385,7 @@ const Checkout = () => {
             event.preventDefault();
 
             try {
+              syncMercadoPagoCardFields();
               const cardData = cardForm.getCardFormData();
               if (!cardData.token) {
                 setCardFormError("Não foi possível tokenizar o cartão. Confira os dados e tente novamente.");
@@ -1259,7 +1319,13 @@ const Checkout = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="form-cardholderName">Nome impresso no cartão</Label>
-                  <Input id="form-cardholderName" placeholder="Ex: JOÃO SILVA" />
+                  <Input
+                    id="form-cardholderName"
+                    placeholder="Ex: JOÃO SILVA"
+                    value={cardholderName}
+                    onChange={(e) => setCardholderName(e.target.value.toUpperCase())}
+                    autoComplete="cc-name"
+                  />
                 </div>
 
                 <div>
@@ -1296,15 +1362,24 @@ const Checkout = () => {
                 </select>
               </div>
 
-              {/* Campos obrigatórios para o SDK, mas escondidos */}
-              <div className="hidden">
-                <Input id="form-cardholderEmail" value={payerEmail} readOnly />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="form-cardholderEmail">Email do pagador</Label>
+                  <Input id="form-cardholderEmail" value={payerEmail} readOnly />
+                </div>
 
-                <Input id="form-identificationNumber" value={payerDocument} readOnly />
+                <div>
+                  <Label htmlFor="form-identificationNumber">CPF/CNPJ do pagador</Label>
+                  <Input id="form-identificationNumber" value={payerDocument} readOnly />
+                </div>
+              </div>
 
+              {/* Campos obrigatórios para o SDK */}
+              <div className="sr-only">
                 <select
                   id="form-identificationType"
-                  defaultValue={payerDocument.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF"}
+                  value={getPayerIdentificationType(payerDocument)}
+                  onChange={() => undefined}
                 >
                   <option value="CPF">CPF</option>
                   <option value="CNPJ">CNPJ</option>
@@ -1396,6 +1471,12 @@ const Checkout = () => {
                 <Button
                   onClick={() => {
                     if (paymentMethod === "card") {
+                      const payerPhoneClean = String(payerPhone || "").replace(/\D/g, "").slice(0, 13);
+                      if (!payerFirstName || !payerLastName || !payerEmail || !payerDocument || payerPhoneClean.length < 10) {
+                        toast.error("Informe nome, sobrenome, e-mail, telefone e CPF/CNPJ para pagar");
+                        return;
+                      }
+                      syncMercadoPagoCardFields();
                       if (!cardFormRef.current?.submit) {
                         toast.error("Formulário do cartão não iniciado");
                         return;
