@@ -28,6 +28,7 @@ interface Order {
   coupon_code?: string | null;
   total: number;
   shipping_address: {
+    pickup?: boolean;
     name?: string;
     document?: string;
     street: string;
@@ -42,6 +43,17 @@ interface Order {
     name: string;
     company: string;
     delivery_time: number;
+    pickup?: boolean;
+    id?: string;
+    address?: {
+      name?: string;
+      street?: string;
+      number?: string;
+      district?: string;
+      city?: string;
+      state?: string;
+      postal_code?: string;
+    };
   } | null;
   tracking_code: string | null;
   created_at: string;
@@ -278,6 +290,22 @@ const Pedido = () => {
     );
   }
 
+  const isPickupOrder = Boolean(
+    order.shipping_address?.pickup ||
+      order.shipping_service?.pickup ||
+      order.shipping_service?.id === 'pickup'
+  );
+
+  const pickupAddress = {
+    name: order.shipping_service?.address?.name || 'Miranda Coast',
+    street: order.shipping_service?.address?.street || order.shipping_address.street,
+    number: order.shipping_service?.address?.number || order.shipping_address.number,
+    neighborhood: order.shipping_service?.address?.district || order.shipping_address.neighborhood,
+    city: order.shipping_service?.address?.city || (order.shipping_address.city === 'Camboriu' ? 'Camboriú' : order.shipping_address.city),
+    state: order.shipping_service?.address?.state || order.shipping_address.state,
+    cep: order.shipping_service?.address?.postal_code || order.shipping_address.cep,
+  };
+
   return (
     <div className="min-h-screen pt-24 pb-12 bg-secondary/20">
       <div className="container max-w-3xl px-4">
@@ -343,23 +371,38 @@ const Pedido = () => {
             <div>
               <h3 className="font-medium mb-3 flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Endereço de Entrega
+                {isPickupOrder ? 'Endereço para retirada do produto' : 'Endereço de entrega'}
               </h3>
               <div className="p-3 bg-secondary/30 rounded-lg">
-                <p className="font-medium">{order.shipping_address.name || 'Cliente'}</p>
-                <p>{order.shipping_address.street}, {order.shipping_address.number}</p>
-                {order.shipping_address.complement && <p>{order.shipping_address.complement}</p>}
-                <p>{order.shipping_address.neighborhood}</p>
-                <p>{order.shipping_address.city} - {order.shipping_address.state}</p>
-                <p>CEP: {order.shipping_address.cep}</p>
-                {order.shipping_address.document && (
-                  <p>Documento: {order.shipping_address.document}</p>
+                {isPickupOrder ? (
+                  <>
+                    <p className="font-medium">{pickupAddress.name}</p>
+                    <p>{pickupAddress.street}, nº {pickupAddress.number}</p>
+                    <p>{pickupAddress.neighborhood}</p>
+                    <p>{pickupAddress.city} - {pickupAddress.state}</p>
+                    <p>CEP: {pickupAddress.cep}</p>
+                    <p className="text-sm text-muted-foreground mt-3">
+                      Após a confirmação do pagamento, nossa equipe entrará em contato para combinar a retirada.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">{order.shipping_address.name || 'Cliente'}</p>
+                    <p>{order.shipping_address.street}, {order.shipping_address.number}</p>
+                    {order.shipping_address.complement && <p>{order.shipping_address.complement}</p>}
+                    <p>{order.shipping_address.neighborhood}</p>
+                    <p>{order.shipping_address.city} - {order.shipping_address.state}</p>
+                    <p>CEP: {order.shipping_address.cep}</p>
+                    {order.shipping_address.document && (
+                      <p>Documento: {order.shipping_address.document}</p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
 
             {/* Shipping info */}
-            {order.shipping_service && (
+            {order.shipping_service && !isPickupOrder && (
               <div>
                 <h3 className="font-medium mb-3 flex items-center gap-2">
                   <Truck className="h-4 w-4" />
@@ -473,8 +516,17 @@ const Pedido = () => {
         </Card>
 
         <div className="p-4 mb-6 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
-          As atualizações de pagamento e envio ficam na aba <strong>Meus Pedidos</strong>. Volte lá
-          para acompanhar o status e o rastreio do seu pedido.
+          {isPickupOrder ? (
+            <>
+              As atualizações de pagamento ficam na aba <strong>Meus Pedidos</strong>. Após a confirmação,
+              a loja entrará em contato para combinar a retirada.
+            </>
+          ) : (
+            <>
+              As atualizações de pagamento e envio ficam na aba <strong>Meus Pedidos</strong>. Volte lá
+              para acompanhar o status e o rastreio do seu pedido.
+            </>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row justify-center gap-4">

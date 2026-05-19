@@ -84,7 +84,7 @@ const LOCAL_PICKUP_OPTION: ShippingOption = {
     street: "Rua Licurana",
     number: "806",
     district: "Tabuleiro",
-    city: "Camboriu",
+    city: "Camboriú",
     state: "SC",
     postal_code: ORIGIN_CEP,
     phone: "",
@@ -976,7 +976,7 @@ const Checkout = () => {
             {step === 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-serif">Como voce quer finalizar?</CardTitle>
+                  <CardTitle className="font-serif">Como deseja receber?</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-3">
@@ -989,7 +989,10 @@ const Checkout = () => {
                       <div className="space-y-1">
                         <p className="font-medium">Retirar na loja</p>
                         <p className="text-sm text-muted-foreground">
-                          Pula endereco e frete. Voce preenche apenas seus dados de pagamento.
+                          📍 Rua Licurana, nº 806 - Tabuleiro, Camboriú.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Após finalizar o pedido, nossa equipe entrará em contato para combinar a retirada.
                         </p>
                       </div>
                     </button>
@@ -1001,9 +1004,12 @@ const Checkout = () => {
                     >
                       <MessageCircle className="mt-1 h-5 w-5 shrink-0 text-primary" />
                       <div className="space-y-1">
-                        <p className="font-medium">BC e regioes proximas</p>
+                        <p className="font-medium">BC e regiões próximas</p>
                         <p className="text-sm text-muted-foreground">
-                          Combina pagamento, entrega ou retirada direto pelo WhatsApp com a loja.
+                          🚚 Entrega local combinada pelo WhatsApp.
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Após finalizar, você será direcionado para falar com a loja e combinar a entrega.
                         </p>
                       </div>
                     </button>
