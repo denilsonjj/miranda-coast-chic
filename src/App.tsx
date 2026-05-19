@@ -57,6 +57,7 @@ const SupabaseAuthRedirectHandler = () => {
     const searchParams = new URLSearchParams(location.search);
     const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
     const code = searchParams.get("code");
+    const tokenHash = searchParams.get("token_hash") || hashParams.get("token_hash");
 
     const error = searchParams.get("error") || hashParams.get("error");
     const errorCode = searchParams.get("error_code") || hashParams.get("error_code");
@@ -77,6 +78,27 @@ const SupabaseAuthRedirectHandler = () => {
       toast.error(message);
       navigate("/auth", { replace: true });
       return;
+    }
+
+    if (isRecovery && tokenHash) {
+      let cancelled = false;
+
+      supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash }).then(({ error }) => {
+        if (cancelled) return;
+
+        if (error) {
+          toast.error("Esse link de recuperação expirou ou já foi usado. Solicite um novo link.");
+          navigate("/auth", { replace: true });
+          return;
+        }
+
+        window.history.replaceState(null, "", "/auth?recovery=1");
+        navigate("/auth?recovery=1", { replace: true });
+      });
+
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (isRecovery && code) {
