@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import RouteSEO from "@/components/RouteSEO";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,13 +54,18 @@ const SupabaseAuthRedirectHandler = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!location.hash) return;
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const code = searchParams.get("code");
 
-    const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-    const error = params.get("error");
-    const errorCode = params.get("error_code");
-    const description = params.get("error_description");
-    const type = params.get("type");
+    const error = searchParams.get("error") || hashParams.get("error");
+    const errorCode = searchParams.get("error_code") || hashParams.get("error_code");
+    const description = searchParams.get("error_description") || hashParams.get("error_description");
+    const type = searchParams.get("type") || hashParams.get("type");
+    const isRecovery =
+      searchParams.get("recovery") === "1" ||
+      type === "recovery" ||
+      hashParams.get("type") === "recovery";
 
     if (error || errorCode) {
       const expired = errorCode === "otp_expired" || description?.toLowerCase().includes("expired");
@@ -73,12 +79,39 @@ const SupabaseAuthRedirectHandler = () => {
       return;
     }
 
+    if (isRecovery && code) {
+      let cancelled = false;
+
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (cancelled) return;
+
+        if (error) {
+          toast.error("Esse link de recuperação expirou ou já foi usado. Solicite um novo link.");
+          navigate("/auth", { replace: true });
+          return;
+        }
+
+        window.history.replaceState(null, "", "/auth?recovery=1");
+        navigate("/auth?recovery=1", { replace: true });
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (isRecovery && (location.pathname !== "/auth" || location.hash || searchParams.get("recovery") !== "1")) {
+      window.history.replaceState(null, "", "/auth?recovery=1");
+      navigate("/auth?recovery=1", { replace: true });
+      return;
+    }
+
     if (type && type !== "recovery") {
       window.history.replaceState(null, "", "/");
       toast.success("Email confirmado com sucesso.");
       navigate("/", { replace: true });
     }
-  }, [location.hash, navigate]);
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   return null;
 };

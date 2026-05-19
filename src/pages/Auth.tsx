@@ -40,6 +40,7 @@ const Auth = () => {
   const location = useLocation();
   const {
     user,
+    session,
     signIn,
     signUp,
     resetPassword,
@@ -159,6 +160,11 @@ const Auth = () => {
     }
 
     if (!validatePassword(newPassword)) return;
+
+    if (!session) {
+      toast.error("Link de recuperação inválido ou expirado. Solicite um novo link.");
+      return;
+    }
 
     setIsLoading(true);
     const { error } = await updatePassword(newPassword);
