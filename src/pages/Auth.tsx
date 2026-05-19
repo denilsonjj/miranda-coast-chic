@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,7 +162,8 @@ const Auth = () => {
 
     if (!validatePassword(newPassword)) return;
 
-    if (!session) {
+    const { data: { session: activeSession } } = await supabase.auth.getSession();
+    if (!session && !activeSession) {
       toast.error("Link de recuperação inválido ou expirado. Solicite um novo link.");
       return;
     }

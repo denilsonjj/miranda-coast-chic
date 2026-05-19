@@ -95,6 +95,15 @@ const SupabaseAuthRedirectHandler = () => {
         if (cancelled) return;
 
         if (error) {
+          const { data: { session: recoveredSession } } = await supabase.auth.getSession();
+          if (cancelled) return;
+
+          if (recoveredSession) {
+            window.history.replaceState(null, "", "/auth?recovery=1");
+            navigate("/auth?recovery=1", { replace: true });
+            return;
+          }
+
           toast.error("Esse link de recuperação expirou ou já foi usado. Solicite um novo link.");
           navigate("/auth", { replace: true });
           return;
